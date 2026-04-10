@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFPage } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 
@@ -19,6 +19,13 @@ type MarginState = {
   bottom: number;
   left: number;
 };
+
+type PageRangeResult = {
+  indices: number[];
+  invalidTokens: string[];
+};
+
+type DownloadMode = 'all' | 'selected';
 
 type Lang = 'zh' | 'en';
 
@@ -52,6 +59,15 @@ const COPY = {
     choosePdf: '点击选择 PDF 文件',
     choosePdfHint: '支持选择本地 PDF 并立即生成预览。',
     outputSize: '输出尺寸',
+    pageRange: '页码范围',
+    pageRangeHint: '示例：1-3, 6, 9-12；留空表示全部页面。',
+    pageRangePlaceholder: '如：1-3, 8, 10-12',
+    allPages: '全部',
+    oddPages: '奇数页',
+    evenPages: '偶数页',
+    selectedPages: (count: number) => `已选择 ${count} 页`,
+    invalidPageRange: (tokens: string) => `无效页码：${tokens}`,
+    pageRangeEmpty: '当前页码范围未匹配任何页面',
     uniformMargin: '统一边距',
     width: '宽度（mm）',
     height: '高度（mm）',
@@ -60,8 +76,12 @@ const COPY = {
     bottom: '下边距（mm）',
     left: '左边距（mm）',
     outputPage: '输出页面',
+    downloadScope: '下载范围',
+    downloadAllPages: '全部页面（保留未调整页）',
+    downloadAdjustedPages: '仅调整页面',
+    downloadAll: '下载全部页面 PDF',
+    downloadSelected: '下载仅调整页面 PDF',
     contentArea: '可用内容区',
-    download: '下载处理后的 PDF',
     processing: '处理中...',
     previewTitle: '实时预览',
     previewDesc: '当前设置下的第一页效果。',
@@ -71,6 +91,7 @@ const COPY = {
     statusReading: '正在读取文件...',
     statusLoaded: (pages: number) => `已加载 ${pages} 页，正在生成预览...`,
     statusPreviewReady: (pages: number) => `已加载 ${pages} 页，预览已就绪`,
+    statusPageRangeEmpty: '页码范围未匹配到可预览页面',
     statusPreviewFail: '预览生成失败',
     statusOutputting: '正在生成输出 PDF...',
     statusDone: 'PDF 已生成并开始下载',
@@ -90,6 +111,15 @@ const COPY = {
     choosePdf: 'Click to choose a PDF',
     choosePdfHint: 'Select a local PDF to generate the preview immediately.',
     outputSize: 'Output size',
+    pageRange: 'Page range',
+    pageRangeHint: 'Example: 1-3, 6, 9-12. Leave empty for all pages.',
+    pageRangePlaceholder: 'e.g. 1-3, 8, 10-12',
+    allPages: 'All',
+    oddPages: 'Odd',
+    evenPages: 'Even',
+    selectedPages: (count: number) => `${count} pages selected`,
+    invalidPageRange: (tokens: string) => `Invalid pages: ${tokens}`,
+    pageRangeEmpty: 'The page range does not match any pages',
     uniformMargin: 'Uniform margin',
     width: 'Width (mm)',
     height: 'Height (mm)',
@@ -98,8 +128,12 @@ const COPY = {
     bottom: 'Bottom margin (mm)',
     left: 'Left margin (mm)',
     outputPage: 'Output page',
+    downloadScope: 'Download scope',
+    downloadAllPages: 'All pages (keep unadjusted pages)',
+    downloadAdjustedPages: 'Adjusted pages only',
+    downloadAll: 'Download all pages PDF',
+    downloadSelected: 'Download adjusted pages PDF',
     contentArea: 'Available content area',
-    download: 'Download processed PDF',
     processing: 'Processing...',
     previewTitle: 'Live preview',
     previewDesc: 'Preview of the first page with current settings.',
@@ -109,6 +143,7 @@ const COPY = {
     statusReading: 'Reading file...',
     statusLoaded: (pages: number) => `Loaded ${pages} pages, generating preview...`,
     statusPreviewReady: (pages: number) => `Loaded ${pages} pages, preview ready`,
+    statusPageRangeEmpty: 'No previewable pages in page range',
     statusPreviewFail: 'Preview generation failed',
     statusOutputting: 'Generating output PDF...',
     statusDone: 'PDF generated and download started',
@@ -151,10 +186,81 @@ function getPageSizeMm(preset: PagePresetKey, customWidthMm: number, customHeigh
   return { widthMm: selected.widthMm, heightMm: selected.heightMm };
 }
 
-async function loadFirstPagePreview(bytes: Uint8Array) {
+async function loadPagePreview(bytes: Uint8Array, pageNumber: number) {
   const pdf = await getDocument({ data: bytes }).promise;
-  const page = await pdf.getPage(1);
+  const page = await pdf.getPage(pageNumber);
   return { pdf, page };
+}
+
+function parsePageRange(input: string, totalPages: number): PageRangeResult {
+  if (totalPages <= 0) {
+    return { indices: [], invalidTokens: [] };
+  }
+
+  const value = input.trim().toLowerCase();
+  if (!value || value === 'all' || value === '*') {
+    return {
+      indices: Array.from({ length: totalPages }, (_, idx) => idx),
+      invalidTokens: [],
+    };
+  }
+
+  if (value === 'odd') {
+    return {
+      indices: Array.from({ length: totalPages }, (_, idx) => idx).filter((idx) => (idx + 1) % 2 === 1),
+      invalidTokens: [],
+    };
+  }
+
+  if (value === 'even') {
+    return {
+      indices: Array.from({ length: totalPages }, (_, idx) => idx).filter((idx) => (idx + 1) % 2 === 0),
+      invalidTokens: [],
+    };
+  }
+
+  const indexSet = new Set<number>();
+  const invalidTokens: string[] = [];
+  const tokens = value
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  tokens.forEach((token) => {
+    if (/^\d+$/.test(token)) {
+      const pageNumber = Number(token);
+      if (pageNumber >= 1 && pageNumber <= totalPages) {
+        indexSet.add(pageNumber - 1);
+      } else {
+        invalidTokens.push(token);
+      }
+      return;
+    }
+
+    const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (!rangeMatch) {
+      invalidTokens.push(token);
+      return;
+    }
+
+    const startRaw = Number(rangeMatch[1]);
+    const endRaw = Number(rangeMatch[2]);
+    if (startRaw < 1 || startRaw > totalPages || endRaw < 1 || endRaw > totalPages) {
+      invalidTokens.push(token);
+      return;
+    }
+
+    const start = Math.min(startRaw, endRaw);
+    const end = Math.max(startRaw, endRaw);
+    for (let current = start; current <= end; current += 1) {
+      indexSet.add(current - 1);
+    }
+  });
+
+  return {
+    indices: Array.from(indexSet).sort((a, b) => a - b),
+    invalidTokens,
+  };
 }
 
 export default function App() {
@@ -162,6 +268,8 @@ export default function App() {
   const [fileName, setFileName] = useState('');
   const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
   const [pageCount, setPageCount] = useState(0);
+  const [pageRangeInput, setPageRangeInput] = useState('');
+  const [downloadMode, setDownloadMode] = useState<DownloadMode>('all');
   const [preset, setPreset] = useState<PagePresetKey>('A4');
   const [customWidthMm, setCustomWidthMm] = useState(210);
   const [customHeightMm, setCustomHeightMm] = useState(297);
@@ -175,9 +283,12 @@ export default function App() {
   const [status, setStatus] = useState('等待上传 PDF');
   const [previewError, setPreviewError] = useState('');
   const [previewScaleInfo, setPreviewScaleInfo] = useState('');
+  const [previewSourceVersion, setPreviewSourceVersion] = useState(0);
 
   const previewWrapRef = useRef<HTMLDivElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sourceViewportRef = useRef<{ width: number; height: number } | null>(null);
   const ui = COPY[lang];
 
   const pageSizeMm = useMemo(
@@ -200,7 +311,21 @@ export default function App() {
     [margins],
   );
 
-  const canProcess = Boolean(fileBytes && pageCount > 0);
+  const pageRangeResult = useMemo(() => parsePageRange(pageRangeInput, pageCount), [pageRangeInput, pageCount]);
+  const selectedPageIndices = pageRangeResult.indices;
+  const previewPageNumber = selectedPageIndices.length > 0 ? selectedPageIndices[0] + 1 : 1;
+  const pageRangeError =
+    pageRangeResult.invalidTokens.length > 0
+      ? ui.invalidPageRange(pageRangeResult.invalidTokens.join(', '))
+      : selectedPageIndices.length === 0 && pageCount > 0
+        ? ui.pageRangeEmpty
+        : '';
+
+  const canProcess = Boolean(
+    fileBytes
+    && pageCount > 0
+    && (downloadMode === 'all' || selectedPageIndices.length > 0),
+  );
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -218,6 +343,7 @@ export default function App() {
       const previewBytes = new Uint8Array(bytes);
       const pdf = await getDocument({ data: previewBytes }).promise;
       setPageCount(pdf.numPages);
+      setPageRangeInput('');
       const firstPage = await pdf.getPage(1);
       const size = firstPage.getViewport({ scale: 1 });
       setPreviewScaleInfo(`${ui.originalSize} ${formatMm(ptToMm(size.width))} × ${formatMm(ptToMm(size.height))}`);
@@ -233,13 +359,12 @@ export default function App() {
 
   useEffect(() => {
     const canvas = previewCanvasRef.current;
-    const container = previewWrapRef.current;
-    if (!canvas || !container) {
+    if (!canvas) {
       return;
     }
 
     let cancelled = false;
-    const render = async () => {
+    const loadSourcePage = async () => {
       if (!fileBytes) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
@@ -247,8 +372,23 @@ export default function App() {
           canvas.height = 1;
           ctx.clearRect(0, 0, 1, 1);
         }
+        sourceCanvasRef.current = null;
+        sourceViewportRef.current = null;
         setStatus(ui.statusWaiting);
         setPreviewScaleInfo('');
+        return;
+      }
+
+      if (selectedPageIndices.length === 0) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          canvas.width = 1;
+          canvas.height = 1;
+          ctx.clearRect(0, 0, 1, 1);
+        }
+        sourceCanvasRef.current = null;
+        sourceViewportRef.current = null;
+        setStatus(ui.statusPageRangeEmpty);
         return;
       }
 
@@ -256,27 +396,13 @@ export default function App() {
       setPreviewError('');
 
       try {
-        const { pdf, page } = await loadFirstPagePreview(new Uint8Array(fileBytes));
+        const { pdf, page } = await loadPagePreview(new Uint8Array(fileBytes), previewPageNumber);
         if (cancelled) {
           pdf.destroy();
           return;
         }
 
         const sourceViewport = page.getViewport({ scale: 1 });
-        const containerWidth = clamp(container.clientWidth || 900, 320, 1100);
-        const displayWidth = Math.floor(containerWidth * window.devicePixelRatio);
-        const displayHeight = Math.floor((containerWidth * pageSizePt.height / pageSizePt.width) * window.devicePixelRatio);
-        canvas.width = displayWidth;
-        canvas.height = displayHeight;
-        canvas.style.width = `${containerWidth}px`;
-        canvas.style.height = `${Math.max(420, displayHeight / window.devicePixelRatio)}px`;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          pdf.destroy();
-          throw new Error('无法创建画布上下文');
-        }
-
         const backgroundScale = Math.min(2.5, 1400 / sourceViewport.width);
         const sourceCanvas = document.createElement('canvas');
         sourceCanvas.width = Math.floor(sourceViewport.width * backgroundScale);
@@ -299,60 +425,9 @@ export default function App() {
           return;
         }
 
-        ctx.save();
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        ctx.clearRect(0, 0, containerWidth, Math.max(420, displayHeight / window.devicePixelRatio));
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, containerWidth, Math.max(420, displayHeight / window.devicePixelRatio));
-
-        const pageCssWidth = Math.min(containerWidth - 64, 780);
-        const pageCssHeight = pageCssWidth * (pageSizePt.height / pageSizePt.width);
-        const offsetX = (containerWidth - pageCssWidth) / 2;
-        const offsetY = 24;
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-        ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
-        ctx.shadowBlur = 30;
-        ctx.shadowOffsetY = 10;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-        ctx.shadowColor = 'transparent';
-
-        const marginLeft = pageCssWidth * (marginBoxPt.left / pageSizePt.width);
-        const marginRight = pageCssWidth * (marginBoxPt.right / pageSizePt.width);
-        const marginTop = pageCssHeight * (marginBoxPt.top / pageSizePt.height);
-        const marginBottom = pageCssHeight * (marginBoxPt.bottom / pageSizePt.height);
-        const contentX = offsetX + marginLeft;
-        const contentY = offsetY + marginTop;
-        const contentWidth = pageCssWidth - marginLeft - marginRight;
-        const contentHeight = pageCssHeight - marginTop - marginBottom;
-
-        ctx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
-        ctx.setLineDash([10, 8]);
-        ctx.strokeRect(contentX, contentY, contentWidth, contentHeight);
-        ctx.setLineDash([]);
-
-        const scale = Math.min(
-          contentWidth / sourceViewport.width,
-          contentHeight / sourceViewport.height,
-        );
-        const drawWidth = sourceViewport.width * scale;
-        const drawHeight = sourceViewport.height * scale;
-        const drawX = contentX + (contentWidth - drawWidth) / 2;
-        const drawY = contentY + (contentHeight - drawHeight) / 2;
-
-        ctx.drawImage(sourceCanvas, drawX, drawY, drawWidth, drawHeight);
-
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-
-        ctx.fillStyle = '#64748b';
-        ctx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        ctx.fillText(`预览为第 1 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`, offsetX, offsetY + pageCssHeight + 28);
-        ctx.restore();
-
+        sourceCanvasRef.current = sourceCanvas;
+        sourceViewportRef.current = { width: sourceViewport.width, height: sourceViewport.height };
+        setPreviewSourceVersion((current) => current + 1);
         setStatus(ui.statusPreviewReady(pdf.numPages));
         pdf.destroy();
       } catch (error) {
@@ -369,12 +444,123 @@ export default function App() {
       }
     };
 
-    void render();
+    void loadSourcePage();
 
     return () => {
       cancelled = true;
     };
-  }, [fileBytes, marginBoxPt, pageSizeMm.heightMm, pageSizeMm.widthMm, pageSizePt.height, pageSizePt.width]);
+  }, [
+    fileBytes,
+    lang,
+    previewPageNumber,
+    selectedPageIndices.length,
+    ui.statusPageRangeEmpty,
+    ui.statusPreviewFail,
+    ui.statusPreviewReady,
+    ui.statusWaiting,
+  ]);
+
+  useEffect(() => {
+    const canvas = previewCanvasRef.current;
+    const container = previewWrapRef.current;
+    const sourceCanvas = sourceCanvasRef.current;
+    const sourceViewport = sourceViewportRef.current;
+    if (!canvas || !container || !fileBytes || !sourceCanvas || !sourceViewport) {
+      return;
+    }
+
+    const containerWidth = clamp(container.clientWidth || 900, 320, 1100);
+    const cssHeight = Math.max(420, containerWidth * (pageSizePt.height / pageSizePt.width));
+    const pixelWidth = Math.floor(containerWidth * window.devicePixelRatio);
+    const pixelHeight = Math.floor(cssHeight * window.devicePixelRatio);
+
+    const bufferCanvas = document.createElement('canvas');
+    bufferCanvas.width = pixelWidth;
+    bufferCanvas.height = pixelHeight;
+    const bufferCtx = bufferCanvas.getContext('2d');
+    if (!bufferCtx) {
+      return;
+    }
+
+    bufferCtx.save();
+    bufferCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    bufferCtx.clearRect(0, 0, containerWidth, cssHeight);
+    bufferCtx.fillStyle = '#0f172a';
+    bufferCtx.fillRect(0, 0, containerWidth, cssHeight);
+
+    const pageCssWidth = Math.min(containerWidth - 64, 780);
+    const pageCssHeight = pageCssWidth * (pageSizePt.height / pageSizePt.width);
+    const offsetX = (containerWidth - pageCssWidth) / 2;
+    const offsetY = 24;
+
+    bufferCtx.fillStyle = '#ffffff';
+    bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
+    bufferCtx.shadowColor = 'rgba(15, 23, 42, 0.28)';
+    bufferCtx.shadowBlur = 30;
+    bufferCtx.shadowOffsetY = 10;
+    bufferCtx.fillStyle = '#ffffff';
+    bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
+    bufferCtx.shadowColor = 'transparent';
+
+    const marginLeft = pageCssWidth * (marginBoxPt.left / pageSizePt.width);
+    const marginRight = pageCssWidth * (marginBoxPt.right / pageSizePt.width);
+    const marginTop = pageCssHeight * (marginBoxPt.top / pageSizePt.height);
+    const marginBottom = pageCssHeight * (marginBoxPt.bottom / pageSizePt.height);
+    const contentX = offsetX + marginLeft;
+    const contentY = offsetY + marginTop;
+    const contentWidth = pageCssWidth - marginLeft - marginRight;
+    const contentHeight = pageCssHeight - marginTop - marginBottom;
+
+    bufferCtx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
+    bufferCtx.setLineDash([10, 8]);
+    bufferCtx.strokeRect(contentX, contentY, contentWidth, contentHeight);
+    bufferCtx.setLineDash([]);
+
+    const scale = Math.min(contentWidth / sourceViewport.width, contentHeight / sourceViewport.height);
+    const drawWidth = sourceViewport.width * scale;
+    const drawHeight = sourceViewport.height * scale;
+    const drawX = contentX + (contentWidth - drawWidth) / 2;
+    const drawY = contentY + (contentHeight - drawHeight) / 2;
+
+    bufferCtx.drawImage(sourceCanvas, drawX, drawY, drawWidth, drawHeight);
+    bufferCtx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
+    bufferCtx.lineWidth = 1;
+    bufferCtx.strokeRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
+    bufferCtx.fillStyle = '#64748b';
+    bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    bufferCtx.fillText(
+      lang === 'zh'
+        ? `预览为第 ${previewPageNumber} 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`
+        : `Preview page ${previewPageNumber}, target size ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`,
+      offsetX,
+      offsetY + pageCssHeight + 28,
+    );
+    bufferCtx.restore();
+
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      canvas.style.width = `${containerWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
+    }
+
+    const screenCtx = canvas.getContext('2d');
+    if (!screenCtx) {
+      return;
+    }
+    screenCtx.clearRect(0, 0, canvas.width, canvas.height);
+    screenCtx.drawImage(bufferCanvas, 0, 0);
+  }, [
+    fileBytes,
+    lang,
+    marginBoxPt,
+    pageSizeMm.heightMm,
+    pageSizeMm.widthMm,
+    pageSizePt.height,
+    pageSizePt.width,
+    previewPageNumber,
+    previewSourceVersion,
+  ]);
 
   async function handleDownload() {
     if (!fileBytes) {
@@ -390,25 +576,44 @@ export default function App() {
       const outputHeight = pageSizePt.height;
       const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
       const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
-      const pageCount = sourceDoc.getPageCount();
-      const copiedPages = await outputDoc.copyPages(
-        sourceDoc,
-        Array.from({ length: pageCount }, (_, index) => index),
-      );
+      const sourcePageCount = sourceDoc.getPageCount();
+      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
 
-      copiedPages.forEach((page) => {
+      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+        setStatus(ui.statusPageRangeEmpty);
+        return;
+      }
+
+      const transformPageWithMargin = (page: PDFPage) => {
         const sourceSize = page.getSize();
         const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
         const drawWidth = sourceSize.width * scale;
         const drawHeight = sourceSize.height * scale;
         const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
         const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
-        outputDoc.addPage(page);
         page.setSize(outputWidth, outputHeight);
         page.scaleContent(scale, scale);
         page.scaleAnnotations(scale, scale);
         page.translateContent(x, y);
-      });
+      };
+
+      if (downloadMode === 'selected') {
+        const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
+        copiedPages.forEach((page) => {
+          outputDoc.addPage(page);
+          transformPageWithMargin(page);
+        });
+      } else {
+        const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
+        const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
+        const selectedSet = new Set(safePageIndices);
+        copiedPages.forEach((page, pageIndex) => {
+          outputDoc.addPage(page);
+          if (selectedSet.has(pageIndex)) {
+            transformPageWithMargin(page);
+          }
+        });
+      }
 
       const outputBytes = await outputDoc.save();
       const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
@@ -418,7 +623,9 @@ export default function App() {
       const anchor = document.createElement('a');
       const baseName = fileName.replace(/\.pdf$/i, '') || 'output';
       anchor.href = url;
-      anchor.download = `${baseName}-margin.pdf`;
+      anchor.download = downloadMode === 'all'
+        ? `${baseName}-mixed-margin.pdf`
+        : `${baseName}-selected-margin.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
       setStatus(ui.statusDone);
@@ -478,6 +685,55 @@ export default function App() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label>
+              <span>{ui.pageRange}</span>
+              <input
+                type="text"
+                value={pageRangeInput}
+                placeholder={ui.pageRangePlaceholder}
+                onChange={(event) => setPageRangeInput(event.target.value)}
+              />
+            </label>
+
+            <div className="range-chip-row" role="group" aria-label={ui.pageRange}>
+              <button type="button" className="range-chip" onClick={() => setPageRangeInput('')}>
+                {ui.allPages}
+              </button>
+              <button type="button" className="range-chip" onClick={() => setPageRangeInput('odd')}>
+                {ui.oddPages}
+              </button>
+              <button type="button" className="range-chip" onClick={() => setPageRangeInput('even')}>
+                {ui.evenPages}
+              </button>
+            </div>
+
+            <p className="muted-text range-hint">{ui.pageRangeHint}</p>
+            <p className="muted-text range-hint">{ui.selectedPages(selectedPageIndices.length)}</p>
+
+            <label>
+              <span>{ui.downloadScope}</span>
+              <div className="range-chip-row" role="radiogroup" aria-label={ui.downloadScope}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={downloadMode === 'all'}
+                  className={`range-chip ${downloadMode === 'all' ? 'active' : ''}`}
+                  onClick={() => setDownloadMode('all')}
+                >
+                  {ui.downloadAllPages}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={downloadMode === 'selected'}
+                  className={`range-chip ${downloadMode === 'selected' ? 'active' : ''}`}
+                  onClick={() => setDownloadMode('selected')}
+                >
+                  {ui.downloadAdjustedPages}
+                </button>
+              </div>
             </label>
 
             <label>
@@ -582,9 +838,10 @@ export default function App() {
           </div>
 
           <button className="primary-button" type="button" onClick={handleDownload} disabled={!canProcess || isRendering}>
-            {isRendering ? ui.processing : ui.download}
+            {isRendering ? ui.processing : downloadMode === 'all' ? ui.downloadAll : ui.downloadSelected}
           </button>
 
+          {pageRangeError ? <p className="error-text">{pageRangeError}</p> : null}
           {previewError ? <p className="error-text">{previewError}</p> : null}
           {previewScaleInfo ? <p className="muted-text">{previewScaleInfo}</p> : null}
         </section>

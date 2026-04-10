@@ -5,11 +5,14 @@
 ## 功能特性
 
 - 上传本地 PDF 文件
+- 页码范围选择：支持 1-3,6,9-12、奇数页、偶数页、全部页面
 - 设置四边边距，也支持统一边距
 - 选择输出纸张尺寸：A4、A3、A5、Letter、Legal、Tabloid、Custom
 - 中英文界面切换
-- 实时预览第一页输出效果
-- 下载处理后的 PDF
+- 实时预览：当设置了页码范围时，预览所选页面中页码最小的页面
+- 下载模式：
+	- 全部页面（仅对选中页面应用边距，未选中页面保持原样，并按原页序合成）
+	- 仅调整页面（仅导出选中并调整后的页面）
 - 基于浏览器可用的 PDF 库实现，无需安装桌面软件
 
 ## 技术栈
@@ -41,14 +44,19 @@ npm run build
 
 1. 点击“选择 PDF 文件”上传文档。
 2. 选择输出尺寸，或切换为 Custom 自定义尺寸。
-3. 调整上、右、下、左边距，或使用统一边距。
-4. 在右侧查看实时预览。
-5. 点击下载按钮生成新的 PDF 文件。
+3. 输入页码范围（如 1-3,6,9-12），或使用“全部 / 奇数页 / 偶数页”快捷按钮。
+4. 调整上、右、下、左边距，或使用统一边距。
+5. 选择下载范围：
+	- 全部页面（推荐，保持原顺序）
+	- 仅调整页面
+6. 在右侧查看实时预览（若指定范围，则预览最小页码页）。
+7. 点击下载按钮生成新的 PDF 文件。
 
 ## 说明
 
-- 预览区域只展示第一页。
-- 输出文件会按当前边距和页面尺寸生成。
+- 预览区域默认展示第一页；设置页码范围后，展示选中范围内页码最小的页面。
+- 全部页面下载会保留未选中页面，并与调整后页面按原顺序合成。
+- 仅调整页面下载只包含选中的页面。
 - 如果 PDF 本身包含复杂内容或大体积图片，生成和下载可能需要更多时间。
 
 ## 常见问题
@@ -74,11 +82,14 @@ A browser-based PDF margin tool that lets you add margins, choose output paper s
 ### Features
 
 - Upload local PDF files
+- Page range selection: supports 1-3,6,9-12, odd pages, even pages, and all pages
 - Set per-side margins or a uniform margin
 - Choose output paper sizes: A4, A3, A5, Letter, Legal, Tabloid, or Custom
 - Switch between Chinese and English UI
-- Live preview of the first page
-- Download the processed PDF
+- Live preview: when a page range is set, the preview shows the smallest selected page number
+- Download scopes:
+	- All pages (apply margins only to selected pages, keep unselected pages unchanged, and merge in original order)
+	- Adjusted pages only (export only selected adjusted pages)
 - Uses browser-safe PDF libraries, no desktop app required
 
 ### Tech Stack
@@ -110,14 +121,19 @@ The production build is generated in the dist folder.
 
 1. Upload a PDF file.
 2. Choose an output paper size, or select Custom.
-3. Adjust the top, right, bottom, and left margins, or use the uniform margin control.
-4. Check the live preview on the right.
-5. Click the download button to generate a new PDF.
+3. Enter a page range (for example: 1-3,6,9-12), or use quick actions for all/odd/even pages.
+4. Adjust the top, right, bottom, and left margins, or use the uniform margin control.
+5. Select a download scope:
+	- All pages (recommended, preserves original page order)
+	- Adjusted pages only
+6. Check the live preview on the right (if range is set, it previews the smallest selected page).
+7. Click the download button to generate a new PDF.
 
 ### Notes
 
-- The preview shows the first page only.
-- The output PDF is generated using the current margin and paper size settings.
+- By default, the preview shows the first page. When a page range is provided, it shows the smallest selected page number.
+- All-pages download keeps unselected pages and merges adjusted and original pages in original order.
+- Adjusted-pages-only download exports only selected pages.
 - Large PDFs or PDFs with many images may take longer to process.
 
 ### Troubleshooting
