@@ -27,7 +27,7 @@ type PageRangeResult = {
 
 type DownloadMode = 'all' | 'selected';
 
-type Lang = 'zh' | 'en';
+export type Lang = 'zh' | 'en';
 
 const MM_TO_PT = 72 / 25.4;
 const PRESETS: Record<PagePresetKey, PagePreset> = {
@@ -263,8 +263,12 @@ function parsePageRange(input: string, totalPages: number): PageRangeResult {
   };
 }
 
-export default function MarginTool() {
-  const [lang, setLang] = useState<Lang>('zh');
+type MarginToolProps = {
+  lang: Lang;
+  onToggleLang: () => void;
+};
+
+export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
   const [fileName, setFileName] = useState('');
   const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -654,7 +658,7 @@ export default function MarginTool() {
         <div className="hero-card">
           <span>{status}</span>
           <strong>{pageCount > 0 ? ui.pagesLoaded(pageCount) : ui.pagesNotLoaded}</strong>
-          <button type="button" className="lang-toggle" onClick={() => setLang((current) => (current === 'zh' ? 'en' : 'zh'))}>
+          <button type="button" className="lang-toggle" onClick={onToggleLang}>
             {ui.language}
           </button>
         </div>

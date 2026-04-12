@@ -1,4 +1,6 @@
-# PDF Margin + Organizer Tool
+# PDFMargin
+
+[English](./README.en.md)
 
 一个在浏览器中运行的 PDF 工具，支持两种模式：
 
@@ -65,44 +67,3 @@ npm run build
 - `src/MarginTool.tsx`：边距工具实现
 - `src/OrganizeTool.tsx`：合并/重排/删页实现
 - `src/styles.css`：全局样式
-
-## English
-
-A browser-based PDF tool with two modes:
-
-- `Margin`: add page margins, choose output paper size, live preview, and export
-- `Organize`: merge multiple PDFs, drag to reorder pages, delete individual pages, and export in current order
-
-All processing runs fully in the browser.
-
-### Features
-
-#### Margin Mode
-
-- Upload a single PDF
-- Page range parsing supports `1-3,6,9-12`, `all/*`, `odd`, and `even`
-- Per-side margin or uniform margin
-- Output presets: `A4`, `A3`, `A5`, `Letter`, `Legal`, `Tabloid`, `Custom`
-- Live preview (uses the smallest selected page number)
-- Two export scopes:
-  - All pages (apply margin only to selected pages)
-  - Selected pages only
-- Chinese/English UI toggle
-
-#### Organize Mode
-
-- Upload multiple PDFs in one batch or multiple batches
-- Expand to page-level cards laid out in a visual grid
-- Card-level PDF page thumbnail preview
-- Real-time drag reordering with slot-shift animation
-- Delete individual pages
-- Export merges exactly by current list order, with no margin transform
-
-### Commands
-
-```bash
-npm install
-npm run dev
-npm run build
-npm run preview
-```

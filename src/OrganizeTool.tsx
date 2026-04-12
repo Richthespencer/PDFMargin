@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
+import type { Lang } from './MarginTool';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -19,6 +20,79 @@ type OrganizePage = {
   sourcePageIndex: number;
   previewDataUrl: string;
 };
+
+const COPY = {
+  zh: {
+    statusReady: '上传多个 PDF 后可拖动排序并删除页面',
+    statusReading: '正在读取文件并展开页面...',
+    statusReadDone: (fileCount: number, pageCount: number) => `已追加 ${fileCount} 个文件，共新增 ${pageCount} 页，可拖动排序`,
+    statusReadFail: '读取失败，请重试',
+    statusOrderUpdated: '页面顺序已更新',
+    statusDeleted: '页面已删除',
+    statusNoPages: '没有可导出的页面',
+    statusExporting: '正在生成合并 PDF...',
+    statusExportDone: '导出完成，已开始下载',
+    statusExportFail: '导出失败',
+    readFail: (message: string) => `读取 PDF 失败：${message}`,
+    exportFail: (message: string) => `导出失败：${message}`,
+    eyebrow: 'PDF Organizer',
+    heroTitle: '合并、拖动排序、删除页面',
+    heroSubtitle: '上传多个 PDF，将所有页面放在一个贴片墙中，自由拖拽调整顺序并按当前结果导出。',
+    pagesLoaded: (count: number) => `共 ${count} 页`,
+    pagesNotLoaded: '未加载页面',
+    language: 'English',
+    sectionFileTitle: '文件与导出',
+    sectionFileDesc: '支持一次选择多个 PDF，也可多次追加上传。',
+    choosingFiles: '处理中...',
+    chooseFiles: '点击选择多个 PDF 文件',
+    chooseFilesHint: '上传后会按文件顺序展开为页面卡片，可继续拖动重排。',
+    uploadedFiles: '已上传文件',
+    totalPages: '当前页面总数',
+    exportButton: '导出当前顺序 PDF',
+    sectionPagesTitle: '页面贴片墙',
+    sectionPagesDesc: '拖动卡片即可调整顺序；点击删除可移除单页。',
+    emptyState: '上传 PDF 后可在这里管理页面顺序',
+    sourcePage: (index: number) => `源页码 ${index}`,
+    remove: '删除',
+    ariaList: 'Organized PDF pages',
+    thumbAlt: (name: string, page: number) => `${name} 第 ${page} 页`,
+  },
+  en: {
+    statusReady: 'Upload multiple PDFs to drag, reorder, and remove pages',
+    statusReading: 'Reading files and expanding pages...',
+    statusReadDone: (fileCount: number, pageCount: number) => `Added ${fileCount} file(s), ${pageCount} new page(s), ready to reorder`,
+    statusReadFail: 'Read failed, please try again',
+    statusOrderUpdated: 'Page order updated',
+    statusDeleted: 'Page removed',
+    statusNoPages: 'No pages available to export',
+    statusExporting: 'Generating merged PDF...',
+    statusExportDone: 'Export complete, download started',
+    statusExportFail: 'Export failed',
+    readFail: (message: string) => `Failed to read PDF: ${message}`,
+    exportFail: (message: string) => `Export failed: ${message}`,
+    eyebrow: 'PDF Organizer',
+    heroTitle: 'Merge PDFs, reorder pages, and delete pages',
+    heroSubtitle: 'Upload multiple PDFs, arrange all pages in a visual card wall, and export exactly in the current order.',
+    pagesLoaded: (count: number) => `${count} pages`,
+    pagesNotLoaded: 'No pages loaded',
+    language: '中文',
+    sectionFileTitle: 'Files and Export',
+    sectionFileDesc: 'You can upload multiple PDFs at once or append more batches later.',
+    choosingFiles: 'Processing...',
+    chooseFiles: 'Click to choose multiple PDFs',
+    chooseFilesHint: 'Uploaded files expand into page cards in file order, then you can drag to reorder.',
+    uploadedFiles: 'Uploaded files',
+    totalPages: 'Total pages',
+    exportButton: 'Export current order PDF',
+    sectionPagesTitle: 'Page Wall',
+    sectionPagesDesc: 'Drag cards to reorder pages; click remove to delete a single page.',
+    emptyState: 'Upload PDFs to manage page order here',
+    sourcePage: (index: number) => `Source page ${index}`,
+    remove: 'Remove',
+    ariaList: 'Organized PDF pages',
+    thumbAlt: (name: string, page: number) => `${name} page ${page}`,
+  },
+} as const;
 
 function moveItem<T>(list: T[], from: number, to: number) {
   if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
@@ -61,10 +135,15 @@ async function renderPagePreview(bytes: Uint8Array, pageNumber: number) {
   return dataUrl;
 }
 
-export default function OrganizeTool() {
+type OrganizeToolProps = {
+  lang: Lang;
+  onToggleLang: () => void;
+};
+
+export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) {
   const [sources, setSources] = useState<OrganizeSource[]>([]);
   const [pages, setPages] = useState<OrganizePage[]>([]);
-  const [status, setStatus] = useState('上传多个 PDF 后可拖动排序并删除页面');
+  const [status, setStatus] = useState<string>(COPY.zh.statusReady);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const draggingIdRef = useRef<string | null>(null);
@@ -78,6 +157,7 @@ export default function OrganizeTool() {
   const lastMoveRef = useRef<{ from: number; to: number; at: number } | null>(null);
 
   const totalPages = pages.length;
+  const ui = COPY[lang];
 
   const pageNumberMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -198,7 +278,7 @@ export default function OrganizeTool() {
 
     setIsProcessing(true);
     setError('');
-    setStatus('正在读取文件并展开页面...');
+    setStatus(ui.statusReading);
 
     try {
       const selectedFiles = Array.from(fileList);
@@ -226,11 +306,11 @@ export default function OrganizeTool() {
 
       setSources((current) => [...current, ...nextSources]);
       setPages((current) => [...current, ...nextPages]);
-      setStatus(`已追加 ${nextSources.length} 个文件，共新增 ${nextPages.length} 页，可拖动排序`);
+      setStatus(ui.statusReadDone(nextSources.length, nextPages.length));
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : String(loadError);
-      setError(`读取 PDF 失败：${message}`);
-      setStatus('读取失败，请重试');
+      setError(ui.readFail(message));
+      setStatus(ui.statusReadFail);
     } finally {
       setIsProcessing(false);
       event.target.value = '';
@@ -248,7 +328,7 @@ export default function OrganizeTool() {
     event.preventDefault();
     reorderWhileDragging(targetId);
     setDropTargetId(null);
-    setStatus('页面顺序已更新');
+    setStatus(ui.statusOrderUpdated);
   }
 
   function handleDragEnd() {
@@ -262,18 +342,18 @@ export default function OrganizeTool() {
 
   function removePage(pageId: string) {
     setPages((current) => current.filter((page) => page.id !== pageId));
-    setStatus('页面已删除');
+    setStatus(ui.statusDeleted);
   }
 
   async function handleExport() {
     if (pages.length === 0) {
-      setStatus('没有可导出的页面');
+      setStatus(ui.statusNoPages);
       return;
     }
 
     setIsProcessing(true);
     setError('');
-    setStatus('正在生成合并 PDF...');
+    setStatus(ui.statusExporting);
 
     try {
       const sourceDocs = new Map<string, PDFDocument>();
@@ -301,11 +381,11 @@ export default function OrganizeTool() {
       anchor.download = `organized-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
-      setStatus('导出完成，已开始下载');
+      setStatus(ui.statusExportDone);
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : String(exportError);
-      setError(`导出失败：${message}`);
-      setStatus('导出失败');
+      setError(ui.exportFail(message));
+      setStatus(ui.statusExportFail);
     } finally {
       setIsProcessing(false);
     }
@@ -315,44 +395,47 @@ export default function OrganizeTool() {
     <div>
       <header className="hero">
         <div>
-          <p className="eyebrow">PDF Organizer</p>
-          <h1>合并、拖动排序、删除页面</h1>
-          <p className="subtitle">上传多个 PDF，将所有页面放在一个列表中，自由拖拽调整顺序并按当前结果导出。</p>
+          <p className="eyebrow">{ui.eyebrow}</p>
+          <h1>{ui.heroTitle}</h1>
+          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
         <div className="hero-card">
           <span>{status}</span>
-          <strong>{totalPages > 0 ? `共 ${totalPages} 页` : '未加载页面'}</strong>
+          <strong>{totalPages > 0 ? ui.pagesLoaded(totalPages) : ui.pagesNotLoaded}</strong>
+          <button type="button" className="lang-toggle" onClick={onToggleLang}>
+            {ui.language}
+          </button>
         </div>
       </header>
 
       <main className="layout organize-layout">
         <section className="panel controls-panel">
           <div className="panel-header">
-            <h2>文件与导出</h2>
-            <p>支持一次选择多个 PDF，也可多次追加上传。</p>
+            <h2>{ui.sectionFileTitle}</h2>
+            <p>{ui.sectionFileDesc}</p>
           </div>
 
           <label className="file-dropzone">
             <input type="file" accept="application/pdf,.pdf" multiple onChange={handleFilesChange} disabled={isProcessing} />
             <div>
-              <strong>{isProcessing ? '处理中...' : '点击选择多个 PDF 文件'}</strong>
-              <span>上传后会按文件顺序展开为页面列表，可继续拖动重排。</span>
+              <strong>{isProcessing ? ui.choosingFiles : ui.chooseFiles}</strong>
+              <span>{ui.chooseFilesHint}</span>
             </div>
           </label>
 
           <div className="summary-card">
             <div>
-              <span>已上传文件</span>
+              <span>{ui.uploadedFiles}</span>
               <strong>{sources.length}</strong>
             </div>
             <div>
-              <span>当前页面总数</span>
+              <span>{ui.totalPages}</span>
               <strong>{totalPages}</strong>
             </div>
           </div>
 
           <button className="primary-button" type="button" onClick={handleExport} disabled={isProcessing || pages.length === 0}>
-            {isProcessing ? '处理中...' : '导出当前顺序 PDF'}
+            {isProcessing ? ui.choosingFiles : ui.exportButton}
           </button>
 
           {error ? <p className="error-text">{error}</p> : null}
@@ -360,13 +443,13 @@ export default function OrganizeTool() {
 
         <section className="panel preview-panel">
           <div className="panel-header">
-            <h2>页面列表</h2>
-            <p>拖动卡片即可调整顺序；点击删除可移除单页。</p>
+            <h2>{ui.sectionPagesTitle}</h2>
+            <p>{ui.sectionPagesDesc}</p>
           </div>
 
-          <div className="organize-grid" role="list" aria-label="Organized PDF pages">
+          <div className="organize-grid" role="list" aria-label={ui.ariaList}>
             {pages.length === 0 ? (
-              <div className="empty-state organize-empty">上传 PDF 后可在这里管理页面顺序</div>
+              <div className="empty-state organize-empty">{ui.emptyState}</div>
             ) : (
               pages.map((page) => (
                 <div
@@ -394,18 +477,18 @@ export default function OrganizeTool() {
                   }}
                 >
                   <div className="organize-preview-wrap">
-                    <img src={page.previewDataUrl} alt={`${page.sourceName} page ${page.sourcePageIndex + 1}`} className="organize-preview" />
+                    <img src={page.previewDataUrl} alt={ui.thumbAlt(page.sourceName, page.sourcePageIndex + 1)} className="organize-preview" />
                   </div>
                   <div className="organize-meta">
                     <div className="organize-item-left">
                       <span className="organize-index">#{pageNumberMap.get(page.id)}</span>
                       <div>
                         <strong>{page.sourceName}</strong>
-                        <p>源页码 {page.sourcePageIndex + 1}</p>
+                        <p>{ui.sourcePage(page.sourcePageIndex + 1)}</p>
                       </div>
                     </div>
                     <button type="button" className="range-chip" onClick={() => removePage(page.id)}>
-                      删除
+                      {ui.remove}
                     </button>
                   </div>
                 </div>
