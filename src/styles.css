@@ -84,9 +84,9 @@ button {
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.6rem);
+  font-size: clamp(1.8rem, 3.3vw, 3rem);
   line-height: 1.05;
-  max-width: 12ch;
+  max-width: none;
 }
 
 .subtitle {
@@ -192,6 +192,22 @@ button {
   font-size: 0.92rem;
 }
 
+.loading-inline {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #bfdbfe;
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #60a5fa;
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .field-grid {
   display: grid;
   gap: 14px;
@@ -265,6 +281,17 @@ select:focus {
   color: #dbeafe;
 }
 
+.range-chip.danger-confirm {
+  border-color: rgba(248, 113, 113, 0.85);
+  background: rgba(127, 29, 29, 0.55);
+  color: #fecaca;
+}
+
+.range-chip.danger-confirm:hover {
+  border-color: rgba(248, 113, 113, 1);
+  background: rgba(153, 27, 27, 0.72);
+}
+
 .range-hint {
   margin: 0;
   font-size: 0.88rem;
@@ -279,6 +306,28 @@ select:focus {
   font-weight: 700;
   padding: 12px 16px;
   transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.secondary-button {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.45);
+  color: #cbd5e1;
+  font-weight: 700;
+  padding: 12px 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.7);
+}
+
+.secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .inline-control button:hover,
@@ -386,9 +435,18 @@ select:focus {
   border-color: rgba(96, 165, 250, 0.6);
 }
 
+.organize-card.is-selected {
+  border-color: rgba(125, 211, 252, 0.95);
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.2);
+}
+
 .organize-card.is-dragging {
   opacity: 0.4;
   transform: scale(0.98);
+}
+
+.organize-card.is-drag-group {
+  opacity: 0.58;
 }
 
 .organize-card.is-target {
@@ -451,6 +509,21 @@ select:focus {
   grid-column: 1 / -1;
   position: static;
   min-height: 220px;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
 }
 
 @media (max-width: 1180px) {

@@ -11,6 +11,9 @@
 - Dev server: `npm run dev`
 - Production build: `npm run build` (runs `tsc -b` first, then `vite build`)
 - Preview built app: `npm run preview`
+- Chrome extension build: `npm run build:extension` (builds web app then prepares `dist-extension/` for unpacked loading)
+- Chrome extension package: `npm run pack:extension` (creates `release/pdfmargin-chrome-extension.zip`)
+- Tauri desktop: `npm run tauri:dev`, `npm run tauri:build`
 
 ## Implementation constraints that are easy to break
 - PDF.js worker wiring is required in `src/MarginTool.tsx`: import `pdfjs-dist/legacy/build/pdf.worker.mjs?url` and set `GlobalWorkerOptions.workerSrc`; preview/file parsing depends on this.

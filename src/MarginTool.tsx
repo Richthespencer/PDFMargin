@@ -5,7 +5,7 @@ import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
-type PagePresetKey = 'A4' | 'A3' | 'A5' | 'Letter' | 'Legal' | 'Tabloid' | 'Custom';
+type PagePresetKey = 'Original' | 'A4' | 'A3' | 'A5' | 'Letter' | 'Legal' | 'Tabloid' | 'Custom';
 
 type PagePreset = {
   label: string;
@@ -31,6 +31,7 @@ export type Lang = 'zh' | 'en';
 
 const MM_TO_PT = 72 / 25.4;
 const PRESETS: Record<PagePresetKey, PagePreset> = {
+  Original: { label: '原尺寸', widthMm: 210, heightMm: 297 },
   A4: { label: 'A4', widthMm: 210, heightMm: 297 },
   A3: { label: 'A3', widthMm: 297, heightMm: 420 },
   A5: { label: 'A5', widthMm: 148, heightMm: 210 },
@@ -41,6 +42,7 @@ const PRESETS: Record<PagePresetKey, PagePreset> = {
 };
 
 const PRESET_LABELS_EN: Record<PagePresetKey, string> = {
+  Original: 'Original',
   A4: 'A4',
   A3: 'A3',
   A5: 'A5',
@@ -178,7 +180,16 @@ function parseNumber(value: string) {
   return Number.isFinite(next) ? next : 0;
 }
 
-function getPageSizeMm(preset: PagePresetKey, customWidthMm: number, customHeightMm: number) {
+function getPageSizeMm(
+  preset: PagePresetKey,
+  customWidthMm: number,
+  customHeightMm: number,
+  originalWidthMm: number,
+  originalHeightMm: number,
+) {
+  if (preset === 'Original') {
+    return { widthMm: originalWidthMm, heightMm: originalHeightMm };
+  }
   if (preset === 'Custom') {
     return { widthMm: customWidthMm, heightMm: customHeightMm };
   }
@@ -274,7 +285,9 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
   const [pageCount, setPageCount] = useState(0);
   const [pageRangeInput, setPageRangeInput] = useState('');
   const [downloadMode, setDownloadMode] = useState<DownloadMode>('all');
-  const [preset, setPreset] = useState<PagePresetKey>('A4');
+  const [preset, setPreset] = useState<PagePresetKey>('Original');
+  const [originalWidthMm, setOriginalWidthMm] = useState(210);
+  const [originalHeightMm, setOriginalHeightMm] = useState(297);
   const [customWidthMm, setCustomWidthMm] = useState(210);
   const [customHeightMm, setCustomHeightMm] = useState(297);
   const [margins, setMargins] = useState<MarginState>({
@@ -296,8 +309,8 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
   const ui = COPY[lang];
 
   const pageSizeMm = useMemo(
-    () => getPageSizeMm(preset, customWidthMm, customHeightMm),
-    [preset, customWidthMm, customHeightMm],
+    () => getPageSizeMm(preset, customWidthMm, customHeightMm, originalWidthMm, originalHeightMm),
+    [preset, customWidthMm, customHeightMm, originalWidthMm, originalHeightMm],
   );
 
   const pageSizePt = useMemo(
@@ -350,6 +363,8 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
       setPageRangeInput('');
       const firstPage = await pdf.getPage(1);
       const size = firstPage.getViewport({ scale: 1 });
+      setOriginalWidthMm(ptToMm(size.width));
+      setOriginalHeightMm(ptToMm(size.height));
       setPreviewScaleInfo(`${ui.originalSize} ${formatMm(ptToMm(size.width))} × ${formatMm(ptToMm(size.height))}`);
       setStatus(ui.statusLoaded(pdf.numPages));
     } catch (error) {

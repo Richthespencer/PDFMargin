@@ -68,6 +68,27 @@ npm run tauri:build
 
 Bundle outputs are generated under `src-tauri/target/release/bundle/`.
 
+## Chrome Extension
+
+```bash
+# Build extension output
+npm run build:extension
+
+# Build and package zip for Chrome Web Store upload
+npm run pack:extension
+```
+
+This generates `dist-extension/`, which can be loaded directly in Chrome Developer Mode:
+
+1. Open `chrome://extensions`
+2. Enable Developer mode
+3. Click Load unpacked
+4. Select `dist-extension/` in this project
+
+Clicking the extension action opens PDFMargin in a new tab.
+
+The packaged zip is generated at `release/pdfmargin-chrome-extension.zip`.
+
 ## Usage
 
 1. Use the top mode switch: `Margin` or `Organize`.

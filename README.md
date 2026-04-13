@@ -68,6 +68,27 @@ npm run tauri:build
 
 打包产物位于 `src-tauri/target/release/bundle/`。
 
+## Chrome Extension
+
+```bash
+# 构建扩展目录
+npm run build:extension
+
+# 构建并打包为 zip（用于 Chrome Web Store 上传）
+npm run pack:extension
+```
+
+构建后会生成 `dist-extension/`，可直接用于 Chrome 开发者模式加载：
+
+1. 打开 `chrome://extensions`
+2. 开启“开发者模式”
+3. 选择“加载已解压的扩展程序”
+4. 选择项目内的 `dist-extension/`
+
+点击扩展图标会在新标签页打开 PDFMargin。
+
+打包后的 zip 文件位于 `release/pdfmargin-chrome-extension.zip`。
+
 ## 使用说明
 
 1. 打开页面顶部模式切换：`Margin` 或 `Organize`。
