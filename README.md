@@ -54,6 +54,20 @@ npm run build
 
 构建结果在 `dist/`。
 
+## Tauri 桌面打包
+
+先确保本机已安装 Rust 工具链与平台构建依赖（如 Xcode Command Line Tools）。
+
+```bash
+# 桌面开发模式（会启动 Vite + Tauri）
+npm run tauri:dev
+
+# 生成安装包
+npm run tauri:build
+```
+
+打包产物位于 `src-tauri/target/release/bundle/`。
+
 ## 使用说明
 
 1. 打开页面顶部模式切换：`Margin` 或 `Organize`。

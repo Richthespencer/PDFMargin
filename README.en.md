@@ -54,6 +54,20 @@ npm run build
 
 Build output is in `dist/`.
 
+## Tauri Desktop Packaging
+
+Make sure Rust and platform build dependencies are installed first (for example, Xcode Command Line Tools on macOS).
+
+```bash
+# Desktop dev mode (runs Vite + Tauri)
+npm run tauri:dev
+
+# Build installer bundles
+npm run tauri:build
+```
+
+Bundle outputs are generated under `src-tauri/target/release/bundle/`.
+
 ## Usage
 
 1. Use the top mode switch: `Margin` or `Organize`.
