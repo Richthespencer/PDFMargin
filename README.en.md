@@ -2,6 +2,8 @@
 
 [中文](./README.md)
 
+[Privacy Policy](./PRIVACY.md)
+
 A browser-based PDF tool with two modes:
 
 - `Margin`: add page margins, choose output paper size, live preview, and export

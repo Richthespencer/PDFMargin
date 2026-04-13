@@ -2,6 +2,8 @@
 
 [English](./README.en.md)
 
+[Privacy Policy](./PRIVACY.md)
+
 一个在浏览器中运行的 PDF 工具，支持两种模式：
 
 - `Margin`：添加边距、调整输出尺寸、实时预览并下载
