@@ -760,10 +760,10 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
               <div className="inline-control">
                 <input
                   type="number"
-                  min="0"
+                  min="-200"
                   step="1"
                   value={margins.top}
-                  onChange={(event) => applyUniformMargin(clamp(parseNumber(event.target.value), 0, 200))}
+                  onChange={(event) => applyUniformMargin(clamp(parseNumber(event.target.value), -200, 200))}
                 />
                 <button type="button" onClick={() => applyUniformMargin(20)}>
                   {ui.useCurrentMargin}
@@ -802,40 +802,40 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
               <span>{ui.top}</span>
               <input
                 type="number"
-                min="0"
+                min="-200"
                 step="1"
                 value={margins.top}
-                onChange={(event) => setMargins((current) => ({ ...current, top: clamp(parseNumber(event.target.value), 0, 200) }))}
+                onChange={(event) => setMargins((current) => ({ ...current, top: clamp(parseNumber(event.target.value), -200, 200) }))}
               />
             </label>
             <label>
               <span>{ui.right}</span>
               <input
                 type="number"
-                min="0"
+                min="-200"
                 step="1"
                 value={margins.right}
-                onChange={(event) => setMargins((current) => ({ ...current, right: clamp(parseNumber(event.target.value), 0, 200) }))}
+                onChange={(event) => setMargins((current) => ({ ...current, right: clamp(parseNumber(event.target.value), -200, 200) }))}
               />
             </label>
             <label>
               <span>{ui.bottom}</span>
               <input
                 type="number"
-                min="0"
+                min="-200"
                 step="1"
                 value={margins.bottom}
-                onChange={(event) => setMargins((current) => ({ ...current, bottom: clamp(parseNumber(event.target.value), 0, 200) }))}
+                onChange={(event) => setMargins((current) => ({ ...current, bottom: clamp(parseNumber(event.target.value), -200, 200) }))}
               />
             </label>
             <label>
               <span>{ui.left}</span>
               <input
                 type="number"
-                min="0"
+                min="-200"
                 step="1"
                 value={margins.left}
-                onChange={(event) => setMargins((current) => ({ ...current, left: clamp(parseNumber(event.target.value), 0, 200) }))}
+                onChange={(event) => setMargins((current) => ({ ...current, left: clamp(parseNumber(event.target.value), -200, 200) }))}
               />
             </label>
           </div>
