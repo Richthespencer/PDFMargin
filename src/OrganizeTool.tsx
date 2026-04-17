@@ -37,6 +37,7 @@ const COPY = {
     statusExporting: '正在生成合并 PDF...',
     statusExportDone: '导出完成，已开始下载',
     statusExportFail: '导出失败',
+    statusPrintReady: '已打开打印窗口',
     statusUndoDone: '已撤销上一步操作',
     statusNoUndo: '没有可撤销的操作',
     statusCleared: '已清除当前页面，可重新上传 PDF',
@@ -56,7 +57,8 @@ const COPY = {
     loadingProgress: (fileIndex: number, totalFiles: number, pageIndex: number, totalPages: number) => `加载中：文件 ${fileIndex}/${totalFiles}，页面 ${pageIndex}/${totalPages}`,
     uploadedFiles: '已上传文件',
     totalPages: '当前页面总数',
-    exportButton: '导出当前顺序 PDF',
+    exportButton: '下载 PDF',
+    print: '打印',
     undoButton: '撤销上一步',
     clearAllButton: '清除全部页面',
     sectionPagesTitle: '页面贴片墙',
@@ -82,6 +84,7 @@ const COPY = {
     statusExporting: 'Generating merged PDF...',
     statusExportDone: 'Export complete, download started',
     statusExportFail: 'Export failed',
+    statusPrintReady: 'Print window opened',
     statusUndoDone: 'Last action undone',
     statusNoUndo: 'Nothing to undo',
     statusCleared: 'All current pages cleared, ready to upload again',
@@ -101,7 +104,8 @@ const COPY = {
     loadingProgress: (fileIndex: number, totalFiles: number, pageIndex: number, totalPages: number) => `Loading: file ${fileIndex}/${totalFiles}, page ${pageIndex}/${totalPages}`,
     uploadedFiles: 'Uploaded files',
     totalPages: 'Total pages',
-    exportButton: 'Export current order PDF',
+    exportButton: 'Download PDF',
+    print: 'Print',
     undoButton: 'Undo last action',
     clearAllButton: 'Clear all pages',
     sectionPagesTitle: 'Page Wall',
@@ -640,6 +644,59 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     }
   }
 
+  async function handlePrint() {
+    if (pages.length === 0) {
+      setStatus(ui.statusNoPages);
+      return;
+    }
+
+    setIsProcessing(true);
+    setError('');
+    setStatus(ui.statusExporting);
+
+    try {
+      const sourceDocs = new Map<string, PDFDocument>();
+      for (const source of sources) {
+        sourceDocs.set(source.id, await PDFDocument.load(new Uint8Array(source.bytes)));
+      }
+
+      const outputDoc = await PDFDocument.create();
+      for (const page of pages) {
+        const sourceDoc = sourceDocs.get(page.sourceId);
+        if (!sourceDoc) {
+          continue;
+        }
+        const copied = await outputDoc.copyPages(sourceDoc, [page.sourcePageIndex]);
+        const outputPage = copied[0];
+        outputPage.setRotation(degrees(page.rotation));
+        outputDoc.addPage(outputPage);
+      }
+
+      const outputBytes = await outputDoc.save();
+      const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
+      new Uint8Array(outputBuffer).set(outputBytes);
+      const blob = new Blob([outputBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.addEventListener('load', () => {
+          printWindow.focus();
+          printWindow.print();
+        });
+      }
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 60000);
+      setStatus(ui.statusPrintReady);
+    } catch (printError) {
+      const message = printError instanceof Error ? printError.message : String(printError);
+      setError(ui.exportFail(message));
+      setStatus(ui.statusExportFail);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   return (
     <div>
       <header className="hero">
@@ -693,9 +750,20 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
             </div>
           </div>
 
-          <button className="primary-button" type="button" onClick={handleExport} disabled={isProcessing || pages.length === 0}>
-            {isProcessing ? ui.choosingFiles : ui.exportButton}
-          </button>
+          <div className="action-row">
+            <button className="primary-button" type="button" onClick={handleExport} disabled={isProcessing || pages.length === 0}>
+              {isProcessing ? ui.choosingFiles : ui.exportButton}
+            </button>
+            <button className="secondary-button print-button" type="button" onClick={handlePrint} disabled={isProcessing || pages.length === 0} title={ui.print}>
+              <svg viewBox="0 0 24 24" className="print-icon" aria-hidden="true">
+                <path
+                  d="M7 3h10a1 1 0 0 1 1 1v4H6V4a1 1 0 0 1 1-1zm0 14h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4zm-2-7h14a3 3 0 0 1 3 3v4a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-4a3 3 0 0 1 3-3zm13 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"
+                  fill="currentColor"
+                />
+              </svg>
+              <span className="print-label">{ui.print}</span>
+            </button>
+          </div>
 
           <button className="secondary-button" type="button" onClick={handleUndo} disabled={isProcessing || undoStack.length === 0}>
             {ui.undoButton}

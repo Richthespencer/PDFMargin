@@ -87,6 +87,7 @@ const COPY = {
     downloadAdjustedPages: '仅调整页面',
     downloadAll: '下载全部页面 PDF',
     downloadSelected: '下载仅调整页面 PDF',
+    print: '打印',
     contentArea: '可用内容区',
     processing: '处理中...',
     previewTitle: '实时预览',
@@ -101,6 +102,7 @@ const COPY = {
     statusPreviewFail: '预览生成失败',
     statusOutputting: '正在生成输出 PDF...',
     statusDone: 'PDF 已生成并开始下载',
+    statusPrintReady: '已打开打印窗口',
     statusOutputFail: '生成失败，请稍后重试',
     statusFileReadFail: '文件读取失败',
     outputSizeInfo: '目标尺寸',
@@ -142,6 +144,7 @@ const COPY = {
     downloadAdjustedPages: 'Adjusted pages only',
     downloadAll: 'Download all pages PDF',
     downloadSelected: 'Download adjusted pages PDF',
+    print: 'Print',
     contentArea: 'Available content area',
     processing: 'Processing...',
     previewTitle: 'Live preview',
@@ -156,6 +159,7 @@ const COPY = {
     statusPreviewFail: 'Preview generation failed',
     statusOutputting: 'Generating output PDF...',
     statusDone: 'PDF generated and download started',
+    statusPrintReady: 'Print window opened',
     statusOutputFail: 'Generation failed, please try again later',
     statusFileReadFail: 'File read failed',
     outputSizeInfo: 'Target size',
@@ -678,6 +682,85 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     }
   }
 
+  async function handlePrint() {
+    if (!fileBytes) {
+      return;
+    }
+
+    try {
+      setIsRendering(true);
+      setStatus(ui.statusOutputting);
+      const sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes));
+      const outputDoc = await PDFDocument.create();
+      const outputWidth = pageSizePt.width;
+      const outputHeight = pageSizePt.height;
+      const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
+      const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
+      const sourcePageCount = sourceDoc.getPageCount();
+      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
+
+      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+        setStatus(ui.statusPageRangeEmpty);
+        return;
+      }
+
+      const transformPageWithMargin = (page: PDFPage) => {
+        const sourceSize = page.getSize();
+        const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
+        const drawWidth = sourceSize.width * scale;
+        const drawHeight = sourceSize.height * scale;
+        const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
+        const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
+        page.setSize(outputWidth, outputHeight);
+        page.scaleContent(scale, scale);
+        page.scaleAnnotations(scale, scale);
+        page.translateContent(x, y);
+      };
+
+      if (downloadMode === 'selected') {
+        const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
+        copiedPages.forEach((page) => {
+          outputDoc.addPage(page);
+          transformPageWithMargin(page);
+        });
+      } else {
+        const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
+        const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
+        const selectedSet = new Set(safePageIndices);
+        copiedPages.forEach((page, pageIndex) => {
+          outputDoc.addPage(page);
+          if (selectedSet.has(pageIndex)) {
+            transformPageWithMargin(page);
+          }
+        });
+      }
+
+      const outputBytes = await outputDoc.save();
+      const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
+      new Uint8Array(outputBuffer).set(outputBytes);
+      const blob = new Blob([outputBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.addEventListener('load', () => {
+          printWindow.focus();
+          printWindow.print();
+        });
+      }
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 60000);
+      setStatus(ui.statusPrintReady);
+    } catch (error) {
+      console.error('Print PDF generation failed:', error);
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(ui.statusOutputFail);
+      setPreviewError(lang === 'zh' ? `打印 PDF 生成失败：${message}` : `Print PDF generation failed: ${message}`);
+    } finally {
+      setIsRendering(false);
+    }
+  }
+
   function applyUniformMargin(value: number) {
     setMargins({ top: value, right: value, bottom: value, left: value });
   }
@@ -921,9 +1004,20 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             </div>
           </div>
 
-          <button className="primary-button" type="button" onClick={handleDownload} disabled={!canProcess || isRendering}>
-            {isRendering ? ui.processing : downloadMode === 'all' ? ui.downloadAll : ui.downloadSelected}
-          </button>
+          <div className="action-row">
+            <button className="primary-button" type="button" onClick={handleDownload} disabled={!canProcess || isRendering}>
+              {isRendering ? ui.processing : downloadMode === 'all' ? ui.downloadAll : ui.downloadSelected}
+            </button>
+            <button className="secondary-button print-button" type="button" onClick={handlePrint} disabled={!canProcess || isRendering}>
+              <svg viewBox="0 0 24 24" className="print-icon" aria-hidden="true">
+                <path
+                  d="M7 3h10a1 1 0 0 1 1 1v4H6V4a1 1 0 0 1 1-1zm0 14h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4zm-2-7h14a3 3 0 0 1 3 3v4a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-4a3 3 0 0 1 3-3zm13 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"
+                  fill="currentColor"
+                />
+              </svg>
+              <span className="print-label">{ui.print}</span>
+            </button>
+          </div>
 
           {pageRangeError ? <p className="error-text">{pageRangeError}</p> : null}
           {previewError ? <p className="error-text">{previewError}</p> : null}

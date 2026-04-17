@@ -469,6 +469,62 @@ select:focus {
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
+.action-row {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.action-row .primary-button {
+  margin-top: 0;
+}
+
+.print-button {
+  margin-top: 0;
+  width: 108px;
+  padding: 14px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.print-icon {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.print-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  white-space: nowrap;
+  transform: translateY(2px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.print-button:hover .print-icon,
+.print-button:focus-visible .print-icon {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+
+.print-button:hover .print-label,
+.print-button:focus-visible .print-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .secondary-button:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: rgba(96, 165, 250, 0.7);
@@ -726,6 +782,29 @@ select:focus {
 
   .field-grid.two-up {
     grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .print-button {
+    width: 100%;
+  }
+
+  .print-label {
+    opacity: 1;
+    transform: none;
+    position: static;
+    display: inline;
+  }
+
+  .print-icon {
+    position: static;
+    margin: 0;
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
 
   .preview-wrap {
