@@ -62,6 +62,7 @@ const COPY = {
     choosePdfHint: '支持选择本地 PDF 并立即生成预览。',
     outputSize: '输出尺寸',
     pageRange: '页码范围',
+    pageRangeSettings: '页码范围设置',
     pageRangeHint: '示例：1-3, 6, 9-12；留空表示全部页面。',
     pageRangePlaceholder: '如：1-3, 8, 10-12',
     allPages: '全部',
@@ -71,6 +72,7 @@ const COPY = {
     invalidPageRange: (tokens: string) => `无效页码：${tokens}`,
     pageRangeEmpty: '当前页码范围未匹配任何页面',
     uniformMargin: '统一边距',
+    perSideMargins: '单独边距调整',
     width: '宽度（mm）',
     height: '高度（mm）',
     top: '上边距（mm）',
@@ -79,6 +81,7 @@ const COPY = {
     left: '左边距（mm）',
     outputPage: '输出页面',
     downloadScope: '下载范围',
+    downloadScopeSettings: '下载范围设置',
     downloadAllPages: '全部页面（保留未调整页）',
     downloadAdjustedPages: '仅调整页面',
     downloadAll: '下载全部页面 PDF',
@@ -107,13 +110,14 @@ const COPY = {
   },
   en: {
     heroTitle: 'Add margins to PDFs and preview the result in real time',
-    heroSubtitle: 'Supports common paper sizes, live first-page preview, and custom margins for quick layout adjustments.',
+    heroSubtitle: 'Adjust margins and export PDFs.',
     panelTitle: 'Controls',
     panelDesc: 'Upload a file and adjust paper and margins.',
     choosePdf: 'Click to choose a PDF',
     choosePdfHint: 'Select a local PDF to generate the preview immediately.',
     outputSize: 'Output size',
     pageRange: 'Page range',
+    pageRangeSettings: 'Page range settings',
     pageRangeHint: 'Example: 1-3, 6, 9-12. Leave empty for all pages.',
     pageRangePlaceholder: 'e.g. 1-3, 8, 10-12',
     allPages: 'All',
@@ -123,6 +127,7 @@ const COPY = {
     invalidPageRange: (tokens: string) => `Invalid pages: ${tokens}`,
     pageRangeEmpty: 'The page range does not match any pages',
     uniformMargin: 'Uniform margin',
+    perSideMargins: 'Per-side margins',
     width: 'Width (mm)',
     height: 'Height (mm)',
     top: 'Top margin (mm)',
@@ -131,6 +136,7 @@ const COPY = {
     left: 'Left margin (mm)',
     outputPage: 'Output page',
     downloadScope: 'Download scope',
+    downloadScopeSettings: 'Download scope settings',
     downloadAllPages: 'All pages (keep unadjusted pages)',
     downloadAdjustedPages: 'Adjusted pages only',
     downloadAll: 'Download all pages PDF',
@@ -290,6 +296,9 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
   const [originalHeightMm, setOriginalHeightMm] = useState(297);
   const [customWidthMm, setCustomWidthMm] = useState(210);
   const [customHeightMm, setCustomHeightMm] = useState(297);
+  const [isPerSideOpen, setIsPerSideOpen] = useState(false);
+  const [isPageRangeOpen, setIsPageRangeOpen] = useState(false);
+  const [isDownloadScopeOpen, setIsDownloadScopeOpen] = useState(false);
   const [margins, setMargins] = useState<MarginState>({
     top: 20,
     right: 20,
@@ -668,7 +677,6 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
         <div>
           <p className="eyebrow">PDF Margin Tool</p>
           <h1>{ui.heroTitle}</h1>
-          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
         <div className="hero-card">
           <span>{status}</span>
@@ -706,70 +714,159 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
               </select>
             </label>
 
-            <label>
-              <span>{ui.pageRange}</span>
-              <input
-                type="text"
-                value={pageRangeInput}
-                placeholder={ui.pageRangePlaceholder}
-                onChange={(event) => setPageRangeInput(event.target.value)}
-              />
-            </label>
+            <div className="margin-priority">
+              <label>
+                <span>{ui.uniformMargin}</span>
+                <div className="inline-control">
+                  <input
+                    type="number"
+                    min="-200"
+                    step="1"
+                    value={margins.top}
+                    onChange={(event) => applyUniformMargin(clamp(parseNumber(event.target.value), -200, 200))}
+                  />
+                  <button type="button" onClick={() => applyUniformMargin(20)}>
+                    {ui.useCurrentMargin}
+                  </button>
+                </div>
+              </label>
 
-            <div className="range-chip-row" role="group" aria-label={ui.pageRange}>
-              <button type="button" className="range-chip" onClick={() => setPageRangeInput('')}>
-                {ui.allPages}
-              </button>
-              <button type="button" className="range-chip" onClick={() => setPageRangeInput('odd')}>
-                {ui.oddPages}
-              </button>
-              <button type="button" className="range-chip" onClick={() => setPageRangeInput('even')}>
-                {ui.evenPages}
-              </button>
+              <div className="collapsible-section">
+                <button
+                  type="button"
+                  className="collapsible-toggle"
+                  onClick={() => setIsPerSideOpen((current) => !current)}
+                  aria-expanded={isPerSideOpen}
+                >
+                  <span>{ui.perSideMargins}</span>
+                  <span>{isPerSideOpen ? '−' : '+'}</span>
+                </button>
+                {isPerSideOpen ? (
+                  <div className="field-grid two-up margin-priority-grid collapsible-body">
+                    <label>
+                      <span>{ui.top}</span>
+                      <input
+                        type="number"
+                        min="-200"
+                        step="1"
+                        value={margins.top}
+                        onChange={(event) => setMargins((current) => ({ ...current, top: clamp(parseNumber(event.target.value), -200, 200) }))}
+                      />
+                    </label>
+                    <label>
+                      <span>{ui.right}</span>
+                      <input
+                        type="number"
+                        min="-200"
+                        step="1"
+                        value={margins.right}
+                        onChange={(event) => setMargins((current) => ({ ...current, right: clamp(parseNumber(event.target.value), -200, 200) }))}
+                      />
+                    </label>
+                    <label>
+                      <span>{ui.bottom}</span>
+                      <input
+                        type="number"
+                        min="-200"
+                        step="1"
+                        value={margins.bottom}
+                        onChange={(event) => setMargins((current) => ({ ...current, bottom: clamp(parseNumber(event.target.value), -200, 200) }))}
+                      />
+                    </label>
+                    <label>
+                      <span>{ui.left}</span>
+                      <input
+                        type="number"
+                        min="-200"
+                        step="1"
+                        value={margins.left}
+                        onChange={(event) => setMargins((current) => ({ ...current, left: clamp(parseNumber(event.target.value), -200, 200) }))}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
-            <p className="muted-text range-hint">{ui.pageRangeHint}</p>
+            <div className="collapsible-section">
+              <button
+                type="button"
+                className="collapsible-toggle"
+                onClick={() => setIsPageRangeOpen((current) => !current)}
+                aria-expanded={isPageRangeOpen}
+              >
+                <span>{ui.pageRangeSettings}</span>
+                <span>{isPageRangeOpen ? '−' : '+'}</span>
+              </button>
+              {isPageRangeOpen ? (
+                <div className="collapsible-body">
+                  <label>
+                    <span>{ui.pageRange}</span>
+                    <input
+                      type="text"
+                      value={pageRangeInput}
+                      placeholder={ui.pageRangePlaceholder}
+                      onChange={(event) => setPageRangeInput(event.target.value)}
+                    />
+                  </label>
+
+                  <div className="range-chip-row" role="group" aria-label={ui.pageRange}>
+                    <button type="button" className="range-chip" onClick={() => setPageRangeInput('')}>
+                      {ui.allPages}
+                    </button>
+                    <button type="button" className="range-chip" onClick={() => setPageRangeInput('odd')}>
+                      {ui.oddPages}
+                    </button>
+                    <button type="button" className="range-chip" onClick={() => setPageRangeInput('even')}>
+                      {ui.evenPages}
+                    </button>
+                  </div>
+
+                  <p className="muted-text range-hint">{ui.pageRangeHint}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="collapsible-section">
+              <button
+                type="button"
+                className="collapsible-toggle"
+                onClick={() => setIsDownloadScopeOpen((current) => !current)}
+                aria-expanded={isDownloadScopeOpen}
+              >
+                <span>{ui.downloadScopeSettings}</span>
+                <span>{isDownloadScopeOpen ? '−' : '+'}</span>
+              </button>
+              {isDownloadScopeOpen ? (
+                <div className="collapsible-body">
+                  <label>
+                    <span>{ui.downloadScope}</span>
+                    <div className="range-chip-row" role="radiogroup" aria-label={ui.downloadScope}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={downloadMode === 'all'}
+                        className={`range-chip ${downloadMode === 'all' ? 'active' : ''}`}
+                        onClick={() => setDownloadMode('all')}
+                      >
+                        {ui.downloadAllPages}
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={downloadMode === 'selected'}
+                        className={`range-chip ${downloadMode === 'selected' ? 'active' : ''}`}
+                        onClick={() => setDownloadMode('selected')}
+                      >
+                        {ui.downloadAdjustedPages}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
             <p className="muted-text range-hint">{ui.selectedPages(selectedPageIndices.length)}</p>
-
-            <label>
-              <span>{ui.downloadScope}</span>
-              <div className="range-chip-row" role="radiogroup" aria-label={ui.downloadScope}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={downloadMode === 'all'}
-                  className={`range-chip ${downloadMode === 'all' ? 'active' : ''}`}
-                  onClick={() => setDownloadMode('all')}
-                >
-                  {ui.downloadAllPages}
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={downloadMode === 'selected'}
-                  className={`range-chip ${downloadMode === 'selected' ? 'active' : ''}`}
-                  onClick={() => setDownloadMode('selected')}
-                >
-                  {ui.downloadAdjustedPages}
-                </button>
-              </div>
-            </label>
-
-            <label>
-              <span>{ui.uniformMargin}</span>
-              <div className="inline-control">
-                <input
-                  type="number"
-                  min="-200"
-                  step="1"
-                  value={margins.top}
-                  onChange={(event) => applyUniformMargin(clamp(parseNumber(event.target.value), -200, 200))}
-                />
-                <button type="button" onClick={() => applyUniformMargin(20)}>
-                  {ui.useCurrentMargin}
-                </button>
-              </div>
-            </label>
           </div>
 
           {preset === 'Custom' ? (
@@ -796,49 +893,6 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
               </label>
             </div>
           ) : null}
-
-          <div className="field-grid two-up">
-            <label>
-              <span>{ui.top}</span>
-              <input
-                type="number"
-                min="-200"
-                step="1"
-                value={margins.top}
-                onChange={(event) => setMargins((current) => ({ ...current, top: clamp(parseNumber(event.target.value), -200, 200) }))}
-              />
-            </label>
-            <label>
-              <span>{ui.right}</span>
-              <input
-                type="number"
-                min="-200"
-                step="1"
-                value={margins.right}
-                onChange={(event) => setMargins((current) => ({ ...current, right: clamp(parseNumber(event.target.value), -200, 200) }))}
-              />
-            </label>
-            <label>
-              <span>{ui.bottom}</span>
-              <input
-                type="number"
-                min="-200"
-                step="1"
-                value={margins.bottom}
-                onChange={(event) => setMargins((current) => ({ ...current, bottom: clamp(parseNumber(event.target.value), -200, 200) }))}
-              />
-            </label>
-            <label>
-              <span>{ui.left}</span>
-              <input
-                type="number"
-                min="-200"
-                step="1"
-                value={margins.left}
-                onChange={(event) => setMargins((current) => ({ ...current, left: clamp(parseNumber(event.target.value), -200, 200) }))}
-              />
-            </label>
-          </div>
 
           <div className="summary-card">
             <div>

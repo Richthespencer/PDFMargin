@@ -7,7 +7,7 @@ type Theme = 'light' | 'dark';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('margin');
-  const [lang, setLang] = useState<Lang>('zh');
+  const [lang, setLang] = useState<Lang>('en');
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {

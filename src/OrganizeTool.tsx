@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, degrees } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Lang } from './MarginTool';
@@ -19,6 +19,7 @@ type OrganizePage = {
   sourceName: string;
   sourcePageIndex: number;
   previewDataUrl: string;
+  rotation: 0 | 90 | 180 | 270;
 };
 
 type InsertPlacement = 'before' | 'after';
@@ -31,12 +32,14 @@ const COPY = {
     statusReadFail: '读取失败，请重试',
     statusOrderUpdated: '页面顺序已更新',
     statusDeleted: '页面已删除',
+    statusRotated: '页面已旋转 90°',
     statusNoPages: '没有可导出的页面',
     statusExporting: '正在生成合并 PDF...',
     statusExportDone: '导出完成，已开始下载',
     statusExportFail: '导出失败',
     statusUndoDone: '已撤销上一步操作',
     statusNoUndo: '没有可撤销的操作',
+    statusCleared: '已清除当前页面，可重新上传 PDF',
     readFail: (message: string) => `读取 PDF 失败：${message}`,
     exportFail: (message: string) => `导出失败：${message}`,
     eyebrow: 'PDF Organizer',
@@ -55,10 +58,13 @@ const COPY = {
     totalPages: '当前页面总数',
     exportButton: '导出当前顺序 PDF',
     undoButton: '撤销上一步',
+    clearAllButton: '清除全部页面',
     sectionPagesTitle: '页面贴片墙',
-    sectionPagesDesc: '拖动卡片即可调整顺序；点击删除可移除单页。',
+    sectionPagesDesc: '拖动卡片即可调整顺序；支持旋转和删除单页。',
     emptyState: '上传 PDF 后可在这里管理页面顺序',
     sourcePage: (index: number) => `源页码 ${index}`,
+    rotate: '旋转',
+    rotateAria: (index: number) => `旋转第 ${index} 页 90 度`,
     remove: '删除',
     confirmRemove: '确认删除',
     ariaList: 'Organized PDF pages',
@@ -71,17 +77,19 @@ const COPY = {
     statusReadFail: 'Read failed, please try again',
     statusOrderUpdated: 'Page order updated',
     statusDeleted: 'Page removed',
+    statusRotated: 'Page rotated by 90°',
     statusNoPages: 'No pages available to export',
     statusExporting: 'Generating merged PDF...',
     statusExportDone: 'Export complete, download started',
     statusExportFail: 'Export failed',
     statusUndoDone: 'Last action undone',
     statusNoUndo: 'Nothing to undo',
+    statusCleared: 'All current pages cleared, ready to upload again',
     readFail: (message: string) => `Failed to read PDF: ${message}`,
     exportFail: (message: string) => `Export failed: ${message}`,
     eyebrow: 'PDF Organizer',
     heroTitle: 'Merge PDFs, reorder pages, and delete pages',
-    heroSubtitle: 'Upload multiple PDFs, arrange all pages in a visual card wall, and export exactly in the current order.',
+    heroSubtitle: 'Upload, reorder, and export pages.',
     pagesLoaded: (count: number) => `${count} pages`,
     pagesNotLoaded: 'No pages loaded',
     language: '中文',
@@ -95,10 +103,13 @@ const COPY = {
     totalPages: 'Total pages',
     exportButton: 'Export current order PDF',
     undoButton: 'Undo last action',
+    clearAllButton: 'Clear all pages',
     sectionPagesTitle: 'Page Wall',
-    sectionPagesDesc: 'Drag cards to reorder pages; click remove to delete a single page.',
+    sectionPagesDesc: 'Drag cards to reorder pages; rotate or remove single pages.',
     emptyState: 'Upload PDFs to manage page order here',
     sourcePage: (index: number) => `Source page ${index}`,
+    rotate: 'Rotate',
+    rotateAria: (index: number) => `Rotate page ${index} by 90 degrees`,
     remove: 'Remove',
     confirmRemove: 'Confirm',
     ariaList: 'Organized PDF pages',
@@ -108,33 +119,6 @@ const COPY = {
 
 function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
-}
-
-async function renderPagePreview(bytes: Uint8Array, pageNumber: number) {
-  const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
-  const page = await pdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 1 });
-  const targetWidth = 180;
-  const scale = Math.min(1.4, targetWidth / viewport.width);
-  const scaled = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.floor(scaled.width);
-  canvas.height = Math.floor(scaled.height);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    pdf.destroy();
-    throw new Error('无法创建缩略图画布');
-  }
-
-  await page
-    .render({
-      canvasContext: ctx,
-      viewport: scaled,
-    } as Parameters<typeof page.render>[0])
-    .promise;
-  const dataUrl = canvas.toDataURL('image/png');
-  pdf.destroy();
-  return dataUrl;
 }
 
 type OrganizeToolProps = {
@@ -383,30 +367,61 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
       const nextSources: OrganizeSource[] = [];
       const nextPages: OrganizePage[] = [];
 
+      let lastProgressUpdate = 0;
+
       for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex += 1) {
         const file = selectedFiles[fileIndex];
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const sourceDoc = await PDFDocument.load(new Uint8Array(bytes));
+        const previewDoc = await getDocument({ data: new Uint8Array(bytes) }).promise;
         const sourceId = createId('source');
-        const pageCount = sourceDoc.getPageCount();
+        const pageCount = previewDoc.numPages;
         nextSources.push({ id: sourceId, name: file.name, bytes, pageCount });
 
         for (let index = 0; index < pageCount; index += 1) {
-          setLoadingProgress({
-            fileIndex: fileIndex + 1,
-            totalFiles: selectedFiles.length,
-            pageIndex: index + 1,
-            totalPages: pageCount,
-          });
-          const previewDataUrl = await renderPagePreview(bytes, index + 1);
+          const now = performance.now();
+          if (now - lastProgressUpdate > 90 || index === pageCount - 1) {
+            setLoadingProgress({
+              fileIndex: fileIndex + 1,
+              totalFiles: selectedFiles.length,
+              pageIndex: index + 1,
+              totalPages: pageCount,
+            });
+            lastProgressUpdate = now;
+          }
+
+          const page = await previewDoc.getPage(index + 1);
+          const viewport = page.getViewport({ scale: 1 });
+          const targetWidth = 180;
+          const scale = Math.min(1.35, targetWidth / viewport.width);
+          const scaled = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(scaled.width);
+          canvas.height = Math.floor(scaled.height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            previewDoc.destroy();
+            throw new Error(lang === 'zh' ? '无法创建缩略图画布' : 'Unable to create thumbnail canvas');
+          }
+
+          await page
+            .render({
+              canvasContext: ctx,
+              viewport: scaled,
+            } as Parameters<typeof page.render>[0])
+            .promise;
+
+          const previewDataUrl = canvas.toDataURL('image/jpeg', 0.86);
           nextPages.push({
             id: createId('page'),
             sourceId,
             sourceName: file.name,
             sourcePageIndex: index,
             previewDataUrl,
+            rotation: 0,
           });
         }
+
+        previewDoc.destroy();
       }
 
       setSources((current) => [...current, ...nextSources]);
@@ -511,6 +526,22 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     setStatus(ui.statusDeleted);
   }
 
+  function rotatePage(pageId: string) {
+    if (!pages.some((page) => page.id === pageId)) {
+      return;
+    }
+    pushUndoSnapshot(pages);
+    setPendingDeleteId(null);
+    setPages((current) => current.map((page) => {
+      if (page.id !== pageId) {
+        return page;
+      }
+      const nextRotation = ((page.rotation + 90) % 360) as OrganizePage['rotation'];
+      return { ...page, rotation: nextRotation };
+    }));
+    setStatus(ui.statusRotated);
+  }
+
   function handleUndo() {
     setUndoStack((current) => {
       if (current.length === 0) {
@@ -537,6 +568,30 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     });
   }
 
+  function handleClearAll() {
+    if (pages.length === 0 && sources.length === 0) {
+      return;
+    }
+
+    setPages([]);
+    setSources([]);
+    setSelectedIds(new Set());
+    selectedIdsRef.current = new Set();
+    setUndoStack([]);
+    setPendingDeleteId(null);
+    setDropTargetId(null);
+    setDraggingId(null);
+    setDraggingGroupIds(new Set());
+    draggingIdRef.current = null;
+    draggingGroupIdsRef.current = new Set();
+    dragStartPagesRef.current = null;
+    lastHoverTargetRef.current = null;
+    lastReorderAtRef.current = 0;
+    lastMoveRef.current = null;
+    setError('');
+    setStatus(ui.statusCleared);
+  }
+
   async function handleExport() {
     if (pages.length === 0) {
       setStatus(ui.statusNoPages);
@@ -560,7 +615,9 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
           continue;
         }
         const copied = await outputDoc.copyPages(sourceDoc, [page.sourcePageIndex]);
-        outputDoc.addPage(copied[0]);
+        const outputPage = copied[0];
+        outputPage.setRotation(degrees(page.rotation));
+        outputDoc.addPage(outputPage);
       }
 
       const outputBytes = await outputDoc.save();
@@ -589,7 +646,6 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
         <div>
           <p className="eyebrow">{ui.eyebrow}</p>
           <h1>{ui.heroTitle}</h1>
-          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
         <div className="hero-card">
           <span>{status}</span>
@@ -645,6 +701,10 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
             {ui.undoButton}
           </button>
 
+          <button className="secondary-button" type="button" onClick={handleClearAll} disabled={isProcessing || pages.length === 0}>
+            {ui.clearAllButton}
+          </button>
+
           {error ? <p className="error-text">{error}</p> : null}
         </section>
 
@@ -686,7 +746,14 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
                   }}
                 >
                   <div className="organize-preview-wrap">
-                    <img src={page.previewDataUrl} alt={ui.thumbAlt(page.sourceName, page.sourcePageIndex + 1)} className="organize-preview" />
+                    <img
+                      src={page.previewDataUrl}
+                      alt={ui.thumbAlt(page.sourceName, page.sourcePageIndex + 1)}
+                      className="organize-preview"
+                      style={{
+                        transform: `rotate(${page.rotation}deg) scale(${page.rotation % 180 === 0 ? 1 : 0.76})`,
+                      }}
+                    />
                   </div>
                   <div className="organize-meta">
                     <div className="organize-item-left">
@@ -696,20 +763,39 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
                         <p>{ui.sourcePage(page.sourcePageIndex + 1)}</p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      className={`range-chip ${pendingDeleteId === page.id ? 'danger-confirm' : ''}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (pendingDeleteId === page.id) {
-                          removePage(page.id);
-                          return;
-                        }
-                        setPendingDeleteId(page.id);
-                      }}
-                    >
-                      {pendingDeleteId === page.id ? ui.confirmRemove : ui.remove}
-                    </button>
+                    <div className="organize-actions">
+                      <button
+                        type="button"
+                        className="range-chip icon-chip"
+                        aria-label={ui.rotateAria(page.sourcePageIndex + 1)}
+                        title={ui.rotate}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          rotatePage(page.id);
+                        }}
+                        >
+                          <svg viewBox="0 0 24 24" className="icon-rotate" aria-hidden="true">
+                          <path
+                            d="M12 3a9 9 0 1 0 8.7 11.2 1 1 0 1 0-1.9-.5A7 7 0 1 1 12 5h2.4l-1.7 1.7a1 1 0 1 0 1.4 1.4l3.4-3.4a1 1 0 0 0 0-1.4L14 0.9a1 1 0 1 0-1.4 1.4L14.4 3H12z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className={`range-chip ${pendingDeleteId === page.id ? 'danger-confirm' : ''}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (pendingDeleteId === page.id) {
+                            removePage(page.id);
+                            return;
+                          }
+                          setPendingDeleteId(page.id);
+                        }}
+                      >
+                        {pendingDeleteId === page.id ? ui.confirmRemove : ui.remove}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
