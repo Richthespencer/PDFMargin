@@ -2,6 +2,8 @@
 
 [English](./README.md) · [Privacy Policy](./PRIVACY.md)
 
+Chrome 应用商店： https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
+
 Chrome 应用商店页面：https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
 
 PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
