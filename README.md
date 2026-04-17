@@ -2,6 +2,8 @@
 
 [中文](./README.zh.md) · [Privacy Policy](./PRIVACY.md)
 
+Chrome Web Store: https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
+
 PDFMargin is a local-first PDF app built around two practical workflows:
 
 - `Margin`: fix print cutoff issues near page edges and output print-ready files
