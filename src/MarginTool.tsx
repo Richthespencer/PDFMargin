@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PDFDocument, PDFPage } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
+import type { Theme } from './App';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -283,9 +284,10 @@ function parsePageRange(input: string, totalPages: number): PageRangeResult {
 type MarginToolProps = {
   lang: Lang;
   onToggleLang: () => void;
+  theme: Theme;
 };
 
-export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
+export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProps) {
   const [fileName, setFileName] = useState('');
   const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -513,7 +515,8 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
     bufferCtx.save();
     bufferCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
     bufferCtx.clearRect(0, 0, containerWidth, cssHeight);
-    bufferCtx.fillStyle = '#0f172a';
+    const isDarkTheme = theme === 'dark';
+    bufferCtx.fillStyle = isDarkTheme ? '#0f172a' : '#e2e8f0';
     bufferCtx.fillRect(0, 0, containerWidth, cssHeight);
 
     const pageCssWidth = Math.min(containerWidth - 64, 780);
@@ -523,7 +526,7 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
 
     bufferCtx.fillStyle = '#ffffff';
     bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-    bufferCtx.shadowColor = 'rgba(15, 23, 42, 0.28)';
+    bufferCtx.shadowColor = isDarkTheme ? 'rgba(15, 23, 42, 0.28)' : 'rgba(15, 23, 42, 0.12)';
     bufferCtx.shadowBlur = 30;
     bufferCtx.shadowOffsetY = 10;
     bufferCtx.fillStyle = '#ffffff';
@@ -551,18 +554,21 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
     const drawY = contentY + (contentHeight - drawHeight) / 2;
 
     bufferCtx.drawImage(sourceCanvas, drawX, drawY, drawWidth, drawHeight);
-    bufferCtx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
+    bufferCtx.strokeStyle = isDarkTheme ? 'rgba(148, 163, 184, 0.8)' : 'rgba(100, 116, 139, 0.65)';
     bufferCtx.lineWidth = 1;
     bufferCtx.strokeRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-    bufferCtx.fillStyle = '#64748b';
-    bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    bufferCtx.fillText(
-      lang === 'zh'
-        ? `预览为第 ${previewPageNumber} 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`
-        : `Preview page ${previewPageNumber}, target size ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`,
-      offsetX,
-      offsetY + pageCssHeight + 28,
-    );
+    const hasNegativeMargin = margins.top < 0 || margins.right < 0 || margins.bottom < 0 || margins.left < 0;
+    if (!hasNegativeMargin) {
+      bufferCtx.fillStyle = isDarkTheme ? '#64748b' : '#475569';
+      bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      bufferCtx.fillText(
+        lang === 'zh'
+          ? `预览为第 ${previewPageNumber} 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`
+          : `Preview page ${previewPageNumber}, target size ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`,
+        offsetX,
+        offsetY + pageCssHeight + 28,
+      );
+    }
     bufferCtx.restore();
 
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
@@ -582,12 +588,17 @@ export default function MarginTool({ lang, onToggleLang }: MarginToolProps) {
     fileBytes,
     lang,
     marginBoxPt,
+    margins.bottom,
+    margins.left,
+    margins.right,
+    margins.top,
     pageSizeMm.heightMm,
     pageSizeMm.widthMm,
     pageSizePt.height,
     pageSizePt.width,
     previewPageNumber,
     previewSourceVersion,
+    theme,
   ]);
 
   async function handleDownload() {

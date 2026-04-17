@@ -3,7 +3,7 @@ import MarginTool, { type Lang } from './MarginTool';
 import OrganizeTool from './OrganizeTool';
 
 type Mode = 'margin' | 'organize';
-type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('margin');
@@ -71,7 +71,7 @@ export default function App() {
         </button>
       </nav>
       {mode === 'margin'
-        ? <MarginTool lang={lang} onToggleLang={handleToggleLang} />
+        ? <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} />
         : <OrganizeTool lang={lang} onToggleLang={handleToggleLang} />}
     </div>
   );
