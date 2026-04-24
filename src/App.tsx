@@ -73,6 +73,12 @@ export default function App() {
       {mode === 'margin'
         ? <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} />
         : <OrganizeTool lang={lang} onToggleLang={handleToggleLang} />}
+      <footer className="app-footer">
+        <span>© 2026 PDFMargin. All rights reserved.</span>
+        <a href="https://github.com/Richthespencer/PDFMargin" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+      </footer>
     </div>
   );
 }

@@ -140,6 +140,7 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [isDragOverPageWall, setIsDragOverPageWall] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState<{
     fileIndex: number;
     totalFiles: number;
@@ -440,6 +441,98 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
       setLoadingProgress(null);
       setIsProcessing(false);
       event.target.value = '';
+    }
+  }
+
+  async function handlePageWallDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragOverPageWall(false);
+    if (isProcessing) {
+      return;
+    }
+
+    const droppedFiles = Array.from(event.dataTransfer.files ?? []).filter((file) => file.type === 'application/pdf');
+    if (droppedFiles.length === 0) {
+      return;
+    }
+
+    setIsProcessing(true);
+    setIsLoadingFiles(true);
+    setLoadingProgress(null);
+    setError('');
+    setStatus(ui.statusReading);
+
+    try {
+      const nextSources: OrganizeSource[] = [];
+      const nextPages: OrganizePage[] = [];
+      let lastProgressUpdate = 0;
+
+      for (let fileIndex = 0; fileIndex < droppedFiles.length; fileIndex += 1) {
+        const file = droppedFiles[fileIndex];
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const previewDoc = await getDocument({ data: new Uint8Array(bytes) }).promise;
+        const sourceId = createId('source');
+        const pageCount = previewDoc.numPages;
+        nextSources.push({ id: sourceId, name: file.name, bytes, pageCount });
+
+        for (let index = 0; index < pageCount; index += 1) {
+          const now = performance.now();
+          if (now - lastProgressUpdate > 90 || index === pageCount - 1) {
+            setLoadingProgress({
+              fileIndex: fileIndex + 1,
+              totalFiles: droppedFiles.length,
+              pageIndex: index + 1,
+              totalPages: pageCount,
+            });
+            lastProgressUpdate = now;
+          }
+
+          const page = await previewDoc.getPage(index + 1);
+          const viewport = page.getViewport({ scale: 1 });
+          const targetWidth = 180;
+          const scale = Math.min(1.35, targetWidth / viewport.width);
+          const scaled = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(scaled.width);
+          canvas.height = Math.floor(scaled.height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            previewDoc.destroy();
+            throw new Error(lang === 'zh' ? '无法创建缩略图画布' : 'Unable to create thumbnail canvas');
+          }
+
+          await page
+            .render({
+              canvasContext: ctx,
+              viewport: scaled,
+            } as Parameters<typeof page.render>[0])
+            .promise;
+
+          const previewDataUrl = canvas.toDataURL('image/jpeg', 0.86);
+          nextPages.push({
+            id: createId('page'),
+            sourceId,
+            sourceName: file.name,
+            sourcePageIndex: index,
+            previewDataUrl,
+            rotation: 0,
+          });
+        }
+
+        previewDoc.destroy();
+      }
+
+      setSources((current) => [...current, ...nextSources]);
+      setPages((current) => [...current, ...nextPages]);
+      setStatus(ui.statusReadDone(nextSources.length, nextPages.length));
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : String(loadError);
+      setError(ui.readFail(message));
+      setStatus(ui.statusReadFail);
+    } finally {
+      setIsLoadingFiles(false);
+      setLoadingProgress(null);
+      setIsProcessing(false);
     }
   }
 
@@ -782,7 +875,19 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
             <p>{ui.sectionPagesDesc}</p>
           </div>
 
-          <div className="organize-grid" role="list" aria-label={ui.ariaList}>
+          <div
+            className={`organize-grid ${isDragOverPageWall ? 'is-drag-over' : ''}`}
+            role="list"
+            aria-label={ui.ariaList}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!isDragOverPageWall) {
+                setIsDragOverPageWall(true);
+              }
+            }}
+            onDragLeave={() => setIsDragOverPageWall(false)}
+            onDrop={handlePageWallDrop}
+          >
             {pages.length === 0 ? (
               <div className="empty-state organize-empty">{ui.emptyState}</div>
             ) : (

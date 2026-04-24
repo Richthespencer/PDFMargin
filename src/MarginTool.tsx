@@ -92,6 +92,9 @@ const COPY = {
     processing: '处理中...',
     previewTitle: '实时预览',
     previewDesc: '当前设置下的第一页效果。',
+    previewPrev: '上一页',
+    previewNext: '下一页',
+    previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
     previewEmpty: '上传 PDF 后即可查看实时预览',
     language: 'English',
     statusWaiting: '等待上传 PDF',
@@ -149,6 +152,9 @@ const COPY = {
     processing: 'Processing...',
     previewTitle: 'Live preview',
     previewDesc: 'Preview of the first page with current settings.',
+    previewPrev: 'Prev',
+    previewNext: 'Next',
+    previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
     previewEmpty: 'Upload a PDF to see the live preview',
     language: '中文',
     statusWaiting: 'Waiting for a PDF',
@@ -316,6 +322,8 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
   const [previewError, setPreviewError] = useState('');
   const [previewScaleInfo, setPreviewScaleInfo] = useState('');
   const [previewSourceVersion, setPreviewSourceVersion] = useState(0);
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [isDragOverPreview, setIsDragOverPreview] = useState(false);
 
   const previewWrapRef = useRef<HTMLDivElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -345,7 +353,11 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
 
   const pageRangeResult = useMemo(() => parsePageRange(pageRangeInput, pageCount), [pageRangeInput, pageCount]);
   const selectedPageIndices = pageRangeResult.indices;
-  const previewPageNumber = selectedPageIndices.length > 0 ? selectedPageIndices[0] + 1 : 1;
+  const activePreviewIndex =
+    selectedPageIndices.length === 0
+      ? 0
+      : Math.min(previewPageIndex, selectedPageIndices.length - 1);
+  const previewPageNumber = selectedPageIndices.length > 0 ? selectedPageIndices[activePreviewIndex] + 1 : 1;
   const pageRangeError =
     pageRangeResult.invalidTokens.length > 0
       ? ui.invalidPageRange(pageRangeResult.invalidTokens.join(', '))
@@ -359,8 +371,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     && (downloadMode === 'all' || selectedPageIndices.length > 0),
   );
 
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function loadMarginFile(file: File) {
     if (!file) {
       return;
     }
@@ -376,6 +387,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
       const pdf = await getDocument({ data: previewBytes }).promise;
       setPageCount(pdf.numPages);
       setPageRangeInput('');
+      setPreviewPageIndex(0);
       const firstPage = await pdf.getPage(1);
       const size = firstPage.getViewport({ scale: 1 });
       setOriginalWidthMm(ptToMm(size.width));
@@ -389,6 +401,24 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
       setPreviewError(lang === 'zh' ? 'PDF 读取失败，请重新选择文件。' : 'PDF failed to load. Please choose another file.');
       setStatus(ui.statusFileReadFail);
     }
+  }
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    await loadMarginFile(file);
+  }
+
+  async function handlePreviewDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragOverPreview(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file || file.type !== 'application/pdf') {
+      return;
+    }
+    await loadMarginFile(file);
   }
 
   useEffect(() => {
@@ -765,6 +795,18 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     setMargins({ top: value, right: value, bottom: value, left: value });
   }
 
+  useEffect(() => {
+    setPreviewPageIndex(0);
+  }, [pageRangeInput, pageCount]);
+
+  function handlePreviewPrev() {
+    setPreviewPageIndex((current) => Math.max(0, current - 1));
+  }
+
+  function handlePreviewNext() {
+    setPreviewPageIndex((current) => Math.min(Math.max(0, selectedPageIndices.length - 1), current + 1));
+  }
+
   return (
     <div>
       <header className="hero">
@@ -1026,10 +1068,54 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
 
         <section className="panel preview-panel">
           <div className="panel-header">
-            <h2>{ui.previewTitle}</h2>
+            <div className="preview-header-row">
+              <h2>{ui.previewTitle}</h2>
+              <div className="preview-nav" role="group" aria-label={ui.previewTitle}>
+                <button
+                  type="button"
+                  className="range-chip icon-text-chip"
+                  onClick={handlePreviewPrev}
+                  disabled={selectedPageIndices.length === 0 || activePreviewIndex <= 0}
+                  title={ui.previewPrev}
+                >
+                  <svg viewBox="0 0 24 24" className="chip-icon" aria-hidden="true">
+                    <path d="M14.7 5.3a1 1 0 0 1 0 1.4L9.4 12l5.3 5.3a1 1 0 1 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" fill="currentColor" />
+                  </svg>
+                  <span className="chip-label">{ui.previewPrev}</span>
+                </button>
+                <span className="preview-counter">
+                  {selectedPageIndices.length === 0
+                    ? ui.previewPageCounter(0, 0)
+                    : ui.previewPageCounter(activePreviewIndex + 1, selectedPageIndices.length)}
+                </span>
+                <button
+                  type="button"
+                  className="range-chip icon-text-chip"
+                  onClick={handlePreviewNext}
+                  disabled={selectedPageIndices.length === 0 || activePreviewIndex >= selectedPageIndices.length - 1}
+                  title={ui.previewNext}
+                >
+                  <svg viewBox="0 0 24 24" className="chip-icon" aria-hidden="true">
+                    <path d="M9.3 5.3a1 1 0 0 1 1.4 0l6 6a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.4-1.4l5.3-5.3-5.3-5.3a1 1 0 0 1 0-1.4z" fill="currentColor" />
+                  </svg>
+                  <span className="chip-label">{ui.previewNext}</span>
+                </button>
+              </div>
+            </div>
             <p>{ui.previewDesc}</p>
           </div>
-          <div className="preview-wrap" ref={previewWrapRef}>
+          <div
+            className={`preview-wrap ${isDragOverPreview ? 'is-drag-over' : ''}`}
+            ref={previewWrapRef}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!isDragOverPreview) {
+                setIsDragOverPreview(true);
+              }
+            }}
+            onDragLeave={() => setIsDragOverPreview(false)}
+            onDrop={handlePreviewDrop}
+          >
             <canvas ref={previewCanvasRef} />
             {!fileBytes ? <div className="empty-state">{ui.previewEmpty}</div> : null}
           </div>
