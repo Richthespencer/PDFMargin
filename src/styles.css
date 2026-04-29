@@ -277,10 +277,11 @@ button {
 
 .layout {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
+  grid-template-columns: 460px minmax(0, 1fr);
   gap: 24px;
   max-width: 1440px;
   margin: 0 auto;
+  align-items: start;
 }
 
 .panel {
@@ -298,6 +299,13 @@ button {
 .preview-panel {
   padding: 24px;
   overflow: hidden;
+}
+
+.margin-preview-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-header h2 {
@@ -490,6 +498,26 @@ button {
   gap: 8px;
 }
 
+.single-line-control {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.single-line-control span {
+  margin: 0;
+  font-weight: 700;
+}
+
+.single-line-control .inline-control {
+  margin: 0;
+}
+
+.aligned-with-margin {
+  padding-left: 12px;
+}
+
 .field-grid span {
   color: var(--text-main);
   font-size: 0.95rem;
@@ -596,6 +624,10 @@ select:focus {
   align-items: stretch;
 }
 
+.margin-action-row {
+  margin-bottom: 6px;
+}
+
 .action-row .primary-button {
   margin-top: 0;
 }
@@ -674,7 +706,7 @@ select:focus {
 .summary-card {
   margin-top: 18px;
   display: grid;
-  gap: 14px;
+  gap: 10px;
   padding: 18px;
   border-radius: 22px;
   background: var(--surface-bg);
@@ -687,8 +719,9 @@ select:focus {
 }
 
 .summary-card strong {
-  display: block;
-  margin-top: 6px;
+  display: inline;
+  margin-top: 0;
+  margin-left: 8px;
   color: var(--text-main);
 }
 
@@ -703,13 +736,29 @@ select:focus {
 
 .preview-wrap {
   position: relative;
-  min-height: 720px;
-  display: grid;
-  place-items: center;
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 16px;
   border-radius: 24px;
   background: var(--preview-bg);
   overflow: hidden;
+}
+
+.margin-preview-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.preview-wrap.is-draggable {
+  cursor: grab;
+}
+
+.preview-wrap.is-draggable:active,
+.preview-wrap.is-pointer-dragging {
+  cursor: grabbing;
 }
 
 .preview-wrap.is-drag-over {
@@ -718,7 +767,8 @@ select:focus {
 }
 
 .preview-wrap canvas {
-  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
   height: auto;
   border-radius: 20px;
   background: transparent;
@@ -738,6 +788,70 @@ select:focus {
 
 .organize-layout {
   grid-template-columns: 340px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.organize-layout .panel {
+  height: 100%;
+}
+
+.organize-layout .preview-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pagewall-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.move-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.move-toolbar-slot {
+  min-height: 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.move-toolbar.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.move-selected-count {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.move-target-input {
+  width: 78px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.move-placement-row {
+  gap: 6px;
+}
+
+.move-action-chip {
+  border-color: rgba(59, 130, 246, 0.9) !important;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.move-action-chip:hover {
+  filter: brightness(1.05);
 }
 
 .organize-grid {
@@ -745,7 +859,9 @@ select:focus {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
-  max-height: 760px;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-right: 4px;
 }
@@ -890,6 +1006,20 @@ select:focus {
 
   .organize-layout {
     grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .organize-layout .panel {
+    height: auto;
+  }
+
+  .organize-layout .preview-panel {
+    display: block;
+  }
+
+  .organize-grid {
+    max-height: 760px;
+    flex: initial;
   }
 
   .hero {
@@ -919,6 +1049,11 @@ select:focus {
 
   .field-grid.two-up {
     grid-template-columns: 1fr;
+  }
+
+  .single-line-control {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .action-row {
@@ -967,6 +1102,17 @@ select:focus {
     min-height: 480px;
   }
 
+  .margin-preview-panel {
+    height: auto;
+    min-height: 0;
+  }
+
+  .margin-preview-wrap {
+    flex: initial;
+    height: auto;
+    min-height: 420px;
+  }
+
   .mode-switch {
     display: flex;
     width: 100%;
@@ -978,5 +1124,18 @@ select:focus {
 
   .organize-item-left strong {
     max-width: 120px;
+  }
+
+  .pagewall-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .move-toolbar-slot {
+    min-height: 0;
+  }
+
+  .move-toolbar {
+    justify-content: flex-start;
   }
 }

@@ -59,7 +59,7 @@ const COPY = {
     heroSubtitle: '支持常见纸张尺寸、单页预览和自定义边距设置，适合快速调整文档版式。',
     panelTitle: '控制面板',
     panelDesc: '上传文件，调整纸张与边距。',
-    choosePdf: '点击选择 PDF 文件',
+    choosePdf: '点击或拖拽 PDF 文件到此处',
     choosePdfHint: '支持选择本地 PDF 并立即生成预览。',
     outputSize: '输出尺寸',
     pageRange: '页码范围',
@@ -91,7 +91,7 @@ const COPY = {
     contentArea: '可用内容区',
     processing: '处理中...',
     previewTitle: '实时预览',
-    previewDesc: '当前设置下的第一页效果。',
+    previewDesc: '当前设置下的第一页效果。可在预览中拖动页面内容来调整边距。',
     previewPrev: '上一页',
     previewNext: '下一页',
     previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
@@ -119,7 +119,7 @@ const COPY = {
     heroSubtitle: 'Adjust margins and export PDFs.',
     panelTitle: 'Controls',
     panelDesc: 'Upload a file and adjust paper and margins.',
-    choosePdf: 'Click to choose a PDF',
+    choosePdf: 'Click or drag a PDF here',
     choosePdfHint: 'Select a local PDF to generate the preview immediately.',
     outputSize: 'Output size',
     pageRange: 'Page range',
@@ -151,7 +151,7 @@ const COPY = {
     contentArea: 'Available content area',
     processing: 'Processing...',
     previewTitle: 'Live preview',
-    previewDesc: 'Preview of the first page with current settings.',
+    previewDesc: 'Preview of the first page with current settings. Drag the page content in preview to adjust margins.',
     previewPrev: 'Prev',
     previewNext: 'Next',
     previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
@@ -188,13 +188,13 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatMm(value: number) {
-  return `${value.toFixed(value >= 10 ? 0 : 1)} mm`;
-}
-
 function parseNumber(value: string) {
   const next = Number(value);
   return Number.isFinite(next) ? next : 0;
+}
+
+function roundTo4(value: number) {
+  return Math.round(value * 10000) / 10000;
 }
 
 function getPageSizeMm(
@@ -320,16 +320,37 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
   const [isRendering, setIsRendering] = useState(false);
   const [status, setStatus] = useState('等待上传 PDF');
   const [previewError, setPreviewError] = useState('');
-  const [previewScaleInfo, setPreviewScaleInfo] = useState('');
   const [previewSourceVersion, setPreviewSourceVersion] = useState(0);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [isDragOverPreview, setIsDragOverPreview] = useState(false);
+  const [isPreviewDragging, setIsPreviewDragging] = useState(false);
 
   const previewWrapRef = useRef<HTMLDivElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceViewportRef = useRef<{ width: number; height: number } | null>(null);
+  const previewLayoutRef = useRef<{
+    pageCssWidth: number;
+    pageCssHeight: number;
+    contentX: number;
+    contentY: number;
+    contentWidth: number;
+    contentHeight: number;
+    pageSizeMmWidth: number;
+    pageSizeMmHeight: number;
+  } | null>(null);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startMargins: MarginState;
+  } | null>(null);
   const ui = COPY[lang];
+
+  function isExternalFileDrag(event: React.DragEvent<HTMLElement>) {
+    const types = Array.from(event.dataTransfer?.types ?? []);
+    return types.includes('Files');
+  }
 
   const pageSizeMm = useMemo(
     () => getPageSizeMm(preset, customWidthMm, customHeightMm, originalWidthMm, originalHeightMm),
@@ -370,6 +391,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     && pageCount > 0
     && (downloadMode === 'all' || selectedPageIndices.length > 0),
   );
+  const canDragPreview = Boolean(fileBytes && selectedPageIndices.length > 0);
 
   async function loadMarginFile(file: File) {
     if (!file) {
@@ -392,7 +414,6 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
       const size = firstPage.getViewport({ scale: 1 });
       setOriginalWidthMm(ptToMm(size.width));
       setOriginalHeightMm(ptToMm(size.height));
-      setPreviewScaleInfo(`${ui.originalSize} ${formatMm(ptToMm(size.width))} × ${formatMm(ptToMm(size.height))}`);
       setStatus(ui.statusLoaded(pdf.numPages));
     } catch (error) {
       setFileBytes(null);
@@ -414,6 +435,9 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
   async function handlePreviewDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragOverPreview(false);
+    if (!isExternalFileDrag(event)) {
+      return;
+    }
     const file = event.dataTransfer.files?.[0];
     if (!file || file.type !== 'application/pdf') {
       return;
@@ -438,8 +462,8 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
         }
         sourceCanvasRef.current = null;
         sourceViewportRef.current = null;
+        previewLayoutRef.current = null;
         setStatus(ui.statusWaiting);
-        setPreviewScaleInfo('');
         return;
       }
 
@@ -452,6 +476,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
         }
         sourceCanvasRef.current = null;
         sourceViewportRef.current = null;
+        previewLayoutRef.current = null;
         setStatus(ui.statusPageRangeEmpty);
         return;
       }
@@ -533,8 +558,11 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
       return;
     }
 
-    const containerWidth = clamp(container.clientWidth || 900, 320, 1100);
-    const cssHeight = Math.max(420, containerWidth * (pageSizePt.height / pageSizePt.width));
+    const horizontalPadding = 32;
+    const verticalPadding = 32;
+    const containerWidth = clamp((container.clientWidth || 900) - horizontalPadding, 280, 1068);
+    const containerHeight = Math.max(360, (container.clientHeight || 620) - verticalPadding);
+    const cssHeight = containerHeight;
     const pixelWidth = Math.floor(containerWidth * window.devicePixelRatio);
     const pixelHeight = Math.floor(cssHeight * window.devicePixelRatio);
 
@@ -553,10 +581,15 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     bufferCtx.fillStyle = isDarkTheme ? '#0f172a' : '#e2e8f0';
     bufferCtx.fillRect(0, 0, containerWidth, cssHeight);
 
-    const pageCssWidth = Math.min(containerWidth - 64, 780);
-    const pageCssHeight = pageCssWidth * (pageSizePt.height / pageSizePt.width);
+    const hasNegativeMargin = margins.top < 0 || margins.right < 0 || margins.bottom < 0 || margins.left < 0;
+    const captionSpace = 34;
+    const pageMaxWidth = Math.max(260, containerWidth - 64);
+    const pageMaxHeight = Math.max(220, containerHeight - 44 - captionSpace);
+    const pageScale = Math.min(pageMaxWidth / pageSizePt.width, pageMaxHeight / pageSizePt.height);
+    const pageCssWidth = pageSizePt.width * pageScale;
+    const pageCssHeight = pageSizePt.height * pageScale;
     const offsetX = (containerWidth - pageCssWidth) / 2;
-    const offsetY = 24;
+    const offsetY = Math.max(16, (containerHeight - pageCssHeight - captionSpace) / 2);
 
     bufferCtx.fillStyle = '#ffffff';
     bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
@@ -575,6 +608,16 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     const contentY = offsetY + marginTop;
     const contentWidth = pageCssWidth - marginLeft - marginRight;
     const contentHeight = pageCssHeight - marginTop - marginBottom;
+    previewLayoutRef.current = {
+      pageCssWidth,
+      pageCssHeight,
+      contentX,
+      contentY,
+      contentWidth,
+      contentHeight,
+      pageSizeMmWidth: pageSizeMm.widthMm,
+      pageSizeMmHeight: pageSizeMm.heightMm,
+    };
 
     bufferCtx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
     bufferCtx.setLineDash([10, 8]);
@@ -591,7 +634,6 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     bufferCtx.strokeStyle = isDarkTheme ? 'rgba(148, 163, 184, 0.8)' : 'rgba(100, 116, 139, 0.65)';
     bufferCtx.lineWidth = 1;
     bufferCtx.strokeRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-    const hasNegativeMargin = margins.top < 0 || margins.right < 0 || margins.bottom < 0 || margins.left < 0;
     if (!hasNegativeMargin) {
       bufferCtx.fillStyle = isDarkTheme ? '#64748b' : '#475569';
       bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -600,7 +642,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
           ? `预览为第 ${previewPageNumber} 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`
           : `Preview page ${previewPageNumber}, target size ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`,
         offsetX,
-        offsetY + pageCssHeight + 28,
+        Math.min(containerHeight - 12, offsetY + pageCssHeight + 24),
       );
     }
     bufferCtx.restore();
@@ -795,6 +837,71 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     setMargins({ top: value, right: value, bottom: value, left: value });
   }
 
+  function handlePreviewPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!canDragPreview) {
+      return;
+    }
+    const layout = previewLayoutRef.current;
+    if (!layout) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const insideContent =
+      x >= layout.contentX
+      && x <= layout.contentX + layout.contentWidth
+      && y >= layout.contentY
+      && y <= layout.contentY + layout.contentHeight;
+
+    if (!insideContent) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startMargins: { ...margins },
+    };
+    setIsPreviewDragging(true);
+  }
+
+  function handlePreviewPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const dragState = dragStateRef.current;
+    const layout = previewLayoutRef.current;
+    if (!dragState || !layout || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.startClientX;
+    const deltaY = event.clientY - dragState.startClientY;
+    const deltaMmX = (deltaX / layout.pageCssWidth) * layout.pageSizeMmWidth;
+    const deltaMmY = (deltaY / layout.pageCssHeight) * layout.pageSizeMmHeight;
+
+    setMargins({
+      top: roundTo4(clamp(dragState.startMargins.top + deltaMmY, -200, 200)),
+      right: roundTo4(clamp(dragState.startMargins.right - deltaMmX, -200, 200)),
+      bottom: roundTo4(clamp(dragState.startMargins.bottom - deltaMmY, -200, 200)),
+      left: roundTo4(clamp(dragState.startMargins.left + deltaMmX, -200, 200)),
+    });
+  }
+
+  function endPreviewDrag(pointerId: number, target: HTMLDivElement) {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== pointerId) {
+      return;
+    }
+    dragStateRef.current = null;
+    setIsPreviewDragging(false);
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  }
+
   useEffect(() => {
     setPreviewPageIndex(0);
   }, [pageRangeInput, pageCount]);
@@ -834,12 +941,11 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             <input type="file" accept="application/pdf,.pdf" onChange={handleFileChange} />
             <div>
               <strong>{fileName || ui.choosePdf}</strong>
-              <span>{ui.choosePdfHint}</span>
             </div>
           </label>
 
           <div className="field-grid">
-            <label>
+            <label className="single-line-control aligned-with-margin">
               <span>{ui.outputSize}</span>
               <select value={preset} onChange={(event) => setPreset(event.target.value as PagePresetKey)}>
                 {Object.entries(PRESETS).map(([key, value]) => (
@@ -851,7 +957,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             </label>
 
             <div className="margin-priority">
-              <label>
+              <label className="single-line-control">
                 <span>{ui.uniformMargin}</span>
                 <div className="inline-control">
                   <input
@@ -1046,7 +1152,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             </div>
           </div>
 
-          <div className="action-row">
+          <div className="action-row margin-action-row">
             <button className="primary-button" type="button" onClick={handleDownload} disabled={!canProcess || isRendering}>
               {isRendering ? ui.processing : downloadMode === 'all' ? ui.downloadAll : ui.downloadSelected}
             </button>
@@ -1063,10 +1169,9 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
 
           {pageRangeError ? <p className="error-text">{pageRangeError}</p> : null}
           {previewError ? <p className="error-text">{previewError}</p> : null}
-          {previewScaleInfo ? <p className="muted-text">{previewScaleInfo}</p> : null}
         </section>
 
-        <section className="panel preview-panel">
+        <section className="panel preview-panel margin-preview-panel">
           <div className="panel-header">
             <div className="preview-header-row">
               <h2>{ui.previewTitle}</h2>
@@ -1105,15 +1210,28 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             <p>{ui.previewDesc}</p>
           </div>
           <div
-            className={`preview-wrap ${isDragOverPreview ? 'is-drag-over' : ''}`}
+            className={`preview-wrap margin-preview-wrap ${isDragOverPreview ? 'is-drag-over' : ''} ${canDragPreview ? 'is-draggable' : ''} ${isPreviewDragging ? 'is-pointer-dragging' : ''}`}
             ref={previewWrapRef}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={(event) => endPreviewDrag(event.pointerId, event.currentTarget)}
+            onPointerCancel={(event) => endPreviewDrag(event.pointerId, event.currentTarget)}
             onDragOver={(event) => {
               event.preventDefault();
-              if (!isDragOverPreview) {
+              if (isExternalFileDrag(event) && !isDragOverPreview) {
                 setIsDragOverPreview(true);
               }
             }}
-            onDragLeave={() => setIsDragOverPreview(false)}
+            onDragLeave={(event) => {
+              if (!isExternalFileDrag(event)) {
+                return;
+              }
+              const nextTarget = event.relatedTarget as Node | null;
+              if (nextTarget && event.currentTarget.contains(nextTarget)) {
+                return;
+              }
+              setIsDragOverPreview(false);
+            }}
             onDrop={handlePreviewDrop}
           >
             <canvas ref={previewCanvasRef} />

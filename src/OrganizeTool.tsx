@@ -31,6 +31,8 @@ const COPY = {
     statusReadDone: (fileCount: number, pageCount: number) => `已追加 ${fileCount} 个文件，共新增 ${pageCount} 页，可拖动排序`,
     statusReadFail: '读取失败，请重试',
     statusOrderUpdated: '页面顺序已更新',
+    statusMoved: '已移动选中页面',
+    statusMoveInvalid: '请输入有效目标位置',
     statusDeleted: '页面已删除',
     statusRotated: '页面已旋转 90°',
     statusNoPages: '没有可导出的页面',
@@ -57,12 +59,18 @@ const COPY = {
     loadingProgress: (fileIndex: number, totalFiles: number, pageIndex: number, totalPages: number) => `加载中：文件 ${fileIndex}/${totalFiles}，页面 ${pageIndex}/${totalPages}`,
     uploadedFiles: '已上传文件',
     totalPages: '当前页面总数',
+    selectedCount: (count: number) => `已选 ${count} 页`,
+    clearSelection: '取消',
     exportButton: '下载 PDF',
     print: '打印',
     undoButton: '撤销上一步',
     clearAllButton: '清除全部页面',
     sectionPagesTitle: '页面贴片墙',
     sectionPagesDesc: '拖动卡片即可调整顺序；支持旋转和删除单页。',
+    moveTo: '移动到',
+    moveBefore: '之前',
+    moveAfter: '之后',
+    moveAction: '移动',
     emptyState: '上传 PDF 后可在这里管理页面顺序',
     sourcePage: (index: number) => `源页码 ${index}`,
     rotate: '旋转',
@@ -78,6 +86,8 @@ const COPY = {
     statusReadDone: (fileCount: number, pageCount: number) => `Added ${fileCount} file(s), ${pageCount} new page(s), ready to reorder`,
     statusReadFail: 'Read failed, please try again',
     statusOrderUpdated: 'Page order updated',
+    statusMoved: 'Selected pages moved',
+    statusMoveInvalid: 'Enter a valid target position',
     statusDeleted: 'Page removed',
     statusRotated: 'Page rotated by 90°',
     statusNoPages: 'No pages available to export',
@@ -104,12 +114,18 @@ const COPY = {
     loadingProgress: (fileIndex: number, totalFiles: number, pageIndex: number, totalPages: number) => `Loading: file ${fileIndex}/${totalFiles}, page ${pageIndex}/${totalPages}`,
     uploadedFiles: 'Uploaded files',
     totalPages: 'Total pages',
+    selectedCount: (count: number) => `${count} selected`,
+    clearSelection: 'Clear',
     exportButton: 'Download PDF',
     print: 'Print',
     undoButton: 'Undo last action',
     clearAllButton: 'Clear all pages',
     sectionPagesTitle: 'Page Wall',
     sectionPagesDesc: 'Drag cards to reorder pages; rotate or remove single pages.',
+    moveTo: 'Move to',
+    moveBefore: 'Before',
+    moveAfter: 'After',
+    moveAction: 'Move',
     emptyState: 'Upload PDFs to manage page order here',
     sourcePage: (index: number) => `Source page ${index}`,
     rotate: 'Rotate',
@@ -141,6 +157,8 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isDragOverPageWall, setIsDragOverPageWall] = useState(false);
+  const [moveTargetInput, setMoveTargetInput] = useState('1');
+  const [movePlacement, setMovePlacement] = useState<InsertPlacement>('before');
   const [loadingProgress, setLoadingProgress] = useState<{
     fileIndex: number;
     totalFiles: number;
@@ -160,8 +178,15 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   const lastHoverTargetRef = useRef<string | null>(null);
   const lastMoveRef = useRef<{ from: number; to: number; at: number } | null>(null);
   const dragStartPagesRef = useRef<OrganizePage[] | null>(null);
+  const ignoreClickUntilRef = useRef(0);
+
+  function isExternalFileDrag(event: React.DragEvent<HTMLElement>) {
+    const types = Array.from(event.dataTransfer?.types ?? []);
+    return types.includes('Files') && !types.includes('application/x-pdfmargin-page');
+  }
 
   const totalPages = pages.length;
+  const selectedCount = selectedIds.size;
   const ui = COPY[lang];
 
   useLayoutEffect(() => {
@@ -232,6 +257,48 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
       return false;
     }
     return a.every((page, index) => page.id === b[index]?.id);
+  }
+
+  function moveSelectionList(
+    current: OrganizePage[],
+    selectedSet: Set<string>,
+    targetPosition: number,
+    placement: InsertPlacement,
+  ) {
+    if (selectedSet.size === 0 || current.length === 0) {
+      return current;
+    }
+
+    const selectedItems = current.filter((page) => selectedSet.has(page.id));
+    if (selectedItems.length === 0 || selectedItems.length === current.length) {
+      return current;
+    }
+
+    const remaining = current.filter((page) => !selectedSet.has(page.id));
+    const targetIndexInCurrent = Math.min(Math.max(targetPosition - 1, 0), current.length - 1);
+    let targetPage: OrganizePage | undefined = current[targetIndexInCurrent];
+
+    if (targetPage && selectedSet.has(targetPage.id)) {
+      if (placement === 'before') {
+        targetPage = current.slice(0, targetIndexInCurrent).reverse().find((page) => !selectedSet.has(page.id))
+          ?? current.slice(targetIndexInCurrent + 1).find((page) => !selectedSet.has(page.id));
+      } else {
+        targetPage = current.slice(targetIndexInCurrent + 1).find((page) => !selectedSet.has(page.id))
+          ?? current.slice(0, targetIndexInCurrent).reverse().find((page) => !selectedSet.has(page.id));
+      }
+      if (!targetPage) {
+        return current;
+      }
+    }
+
+    const targetIndexInRemaining = remaining.findIndex((page) => page.id === targetPage.id);
+    if (targetIndexInRemaining < 0) {
+      return current;
+    }
+
+    const insertAt = placement === 'after' ? targetIndexInRemaining + 1 : targetIndexInRemaining;
+    const next = [...remaining.slice(0, insertAt), ...selectedItems, ...remaining.slice(insertAt)];
+    return hasSameOrder(next, current) ? current : next;
   }
 
   function pushUndoSnapshot(snapshot: OrganizePage[]) {
@@ -447,6 +514,12 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   async function handlePageWallDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragOverPageWall(false);
+    if (draggingIdRef.current) {
+      return;
+    }
+    if (!isExternalFileDrag(event)) {
+      return;
+    }
     if (isProcessing) {
       return;
     }
@@ -536,28 +609,26 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     }
   }
 
-  function handleCardClick(pageId: string, event: React.MouseEvent<HTMLDivElement>) {
-    const isToggle = event.metaKey || event.ctrlKey;
+  function handleCardClick(pageId: string) {
+    if (performance.now() < ignoreClickUntilRef.current) {
+      return;
+    }
+
     setPendingDeleteId(null);
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (isToggle) {
-        if (next.has(pageId)) {
-          next.delete(pageId);
-        } else {
-          next.add(pageId);
-        }
-        return next;
+      if (next.has(pageId)) {
+        next.delete(pageId);
+      } else {
+        next.add(pageId);
       }
-
-      if (next.size === 1 && next.has(pageId)) {
-        return next;
-      }
-      return new Set([pageId]);
+      return next;
     });
   }
 
   function handleDragStart(pageId: string, event: React.DragEvent<HTMLDivElement>) {
+    setIsDragOverPageWall(false);
+    ignoreClickUntilRef.current = performance.now() + 280;
     setPendingDeleteId(null);
     const existingSelection = selectedIdsRef.current;
     const draggingSet = existingSelection.has(pageId)
@@ -576,6 +647,7 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     setDraggingGroupIds(new Set(draggingSet));
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', pageId);
+    event.dataTransfer.setData('application/x-pdfmargin-page', '1');
   }
 
   function handleDrop(targetId: string, event: React.DragEvent<HTMLDivElement>) {
@@ -586,6 +658,7 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   }
 
   function handleDragEnd() {
+    setIsDragOverPageWall(false);
     const startPages = dragStartPagesRef.current;
     if (startPages && !hasSameOrder(startPages, pages)) {
       pushUndoSnapshot(startPages);
@@ -687,6 +760,34 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
     lastMoveRef.current = null;
     setError('');
     setStatus(ui.statusCleared);
+  }
+
+  function handleMoveSelected() {
+    if (selectedCount === 0) {
+      return;
+    }
+
+    const targetPosition = Number(moveTargetInput);
+    if (!Number.isInteger(targetPosition) || targetPosition < 1 || targetPosition > pages.length) {
+      setStatus(ui.statusMoveInvalid);
+      return;
+    }
+
+    const next = moveSelectionList(pages, selectedIdsRef.current, targetPosition, movePlacement);
+    if (next === pages) {
+      return;
+    }
+
+    pushUndoSnapshot(pages);
+    setPendingDeleteId(null);
+    setDropTargetId(null);
+    setPages(next);
+    setStatus(ui.statusMoved);
+  }
+
+  function handleClearSelection() {
+    setSelectedIds(new Set());
+    selectedIdsRef.current = new Set();
   }
 
   async function handleExport() {
@@ -871,7 +972,54 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
 
         <section className="panel preview-panel">
           <div className="panel-header">
-            <h2>{ui.sectionPagesTitle}</h2>
+            <div className="pagewall-header-row">
+              <h2>{ui.sectionPagesTitle}</h2>
+              <div className="move-toolbar-slot">
+                <div
+                  className={`move-toolbar ${selectedCount > 0 ? '' : 'is-hidden'}`}
+                  role="group"
+                  aria-label={ui.moveTo}
+                  aria-hidden={selectedCount === 0}
+                >
+                  <span className="move-selected-count">{ui.selectedCount(selectedCount)}</span>
+                  <button type="button" className="range-chip danger-confirm" onClick={handleClearSelection}>
+                    {ui.clearSelection}
+                  </button>
+                  <span>{ui.moveTo}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.max(1, pages.length)}
+                    value={moveTargetInput}
+                    onChange={(event) => setMoveTargetInput(event.target.value)}
+                    className="move-target-input"
+                  />
+                  <div className="range-chip-row move-placement-row" role="radiogroup" aria-label={ui.moveTo}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={movePlacement === 'before'}
+                      className={`range-chip ${movePlacement === 'before' ? 'active' : ''}`}
+                      onClick={() => setMovePlacement('before')}
+                    >
+                      {ui.moveBefore}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={movePlacement === 'after'}
+                      className={`range-chip ${movePlacement === 'after' ? 'active' : ''}`}
+                      onClick={() => setMovePlacement('after')}
+                    >
+                      {ui.moveAfter}
+                    </button>
+                  </div>
+                  <button type="button" className="range-chip move-action-chip" onClick={handleMoveSelected}>
+                    {ui.moveAction}
+                  </button>
+                </div>
+              </div>
+            </div>
             <p>{ui.sectionPagesDesc}</p>
           </div>
 
@@ -881,11 +1029,29 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
             aria-label={ui.ariaList}
             onDragOver={(event) => {
               event.preventDefault();
-              if (!isDragOverPageWall) {
+              if (draggingIdRef.current) {
+                if (isDragOverPageWall) {
+                  setIsDragOverPageWall(false);
+                }
+                return;
+              }
+              if (isExternalFileDrag(event) && !isDragOverPageWall) {
                 setIsDragOverPageWall(true);
               }
             }}
-            onDragLeave={() => setIsDragOverPageWall(false)}
+            onDragLeave={(event) => {
+              if (draggingIdRef.current) {
+                return;
+              }
+              if (!isExternalFileDrag(event)) {
+                return;
+              }
+              const nextTarget = event.relatedTarget as Node | null;
+              if (nextTarget && event.currentTarget.contains(nextTarget)) {
+                return;
+              }
+              setIsDragOverPageWall(false);
+            }}
             onDrop={handlePageWallDrop}
           >
             {pages.length === 0 ? (
@@ -898,7 +1064,7 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
                   className={`organize-card ${selectedIds.has(page.id) ? 'is-selected' : ''} ${draggingId === page.id ? 'is-dragging' : ''} ${draggingGroupIds.has(page.id) ? 'is-drag-group' : ''} ${dropTargetId === page.id ? 'is-target' : ''}`}
                   aria-selected={selectedIds.has(page.id)}
                   draggable
-                  onClick={(event) => handleCardClick(page.id, event)}
+                  onClick={() => handleCardClick(page.id)}
                   onDragStart={(event) => handleDragStart(page.id, event)}
                   onDragEnd={handleDragEnd}
                   onDragOver={(event) => {

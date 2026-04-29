@@ -17,9 +17,10 @@ All processing runs locally in your browser/desktop runtime.
 
 - Output size supports `Original` (default) plus `A4/A3/A5/Letter/Legal/Tabloid/Custom`
 - Uniform and per-side margins, including negative margin values
+- Drag page content directly in Live Preview to fine-tune margins
 - Download adjusted PDFs or print directly
 - Page range syntax: `1-3,6,9-12`, `all/*`, `odd`, `even`
-- Live preview before output
+- Live preview supports page navigation and drag-and-drop PDF upload
 - Download modes:
   - All pages (apply margins only to selected pages)
   - Selected pages only
@@ -27,9 +28,11 @@ All processing runs locally in your browser/desktop runtime.
 ### Organize
 
 - Upload multiple PDFs in one or multiple batches
+- Drag-and-drop upload is supported in the Page Wall area
 - Visual page wall with thumbnails
 - Drag-and-drop reorder (including moving to final position)
-- `Cmd/Ctrl + Click` multi-select with group drag
+- Click-to-toggle multi-select and group drag
+- Move selected pages to a target position (`Move to` with Before/After)
 - 90° per-page rotation
 - Two-step delete confirmation
 - One-click clear all pages and undo last action

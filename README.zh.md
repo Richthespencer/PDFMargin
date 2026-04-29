@@ -2,8 +2,6 @@
 
 [English](./README.md) · [Privacy Policy](./PRIVACY.md)
 
-Chrome 应用商店： https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
-
 Chrome 应用商店页面：https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
 
 PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
@@ -19,9 +17,10 @@ PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
 
 - 输出尺寸支持 `原尺寸`（默认）以及 `A4/A3/A5/Letter/Legal/Tabloid/Custom`
 - 支持统一边距与四边独立边距（允许负边距）
+- 支持在 Live Preview 中直接拖动页面内容微调边距
 - 支持下载 PDF 与直接打印调整结果
 - 页码范围支持 `1-3,6,9-12`、`all/*`、`odd`、`even`
-- 实时预览当前设置效果
+- 实时预览支持分页切换与拖拽上传 PDF
 - 下载模式：
   - 全部页面（仅对选中页应用边距）
   - 仅调整页面
@@ -29,9 +28,11 @@ PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
 ### Organize（页面整理）
 
 - 一次或多次上传多个 PDF
+- 页面墙区域支持拖拽上传 PDF
 - 页面墙缩略图视图（非列表）
 - 拖拽重排（支持拖到最后位置）
-- `Cmd/Ctrl + 点击` 多选并组拖移动
+- 单击切换多选并组拖移动
+- 支持手动指定目标位置移动（Move to + Before/After）
 - 单页 90° 旋转
 - 删除二次确认与一键清空全部页面
 - 撤销上一步（支持撤销重排/删除）
