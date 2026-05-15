@@ -5,9 +5,14 @@ import OrganizeTool from './OrganizeTool';
 type Mode = 'margin' | 'organize';
 export type Theme = 'light' | 'dark';
 
+function detectBrowserLang(): Lang {
+  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage || '';
+  return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
 export default function App() {
   const [mode, setMode] = useState<Mode>('margin');
-  const [lang, setLang] = useState<Lang>('en');
+  const [lang, setLang] = useState<Lang>(detectBrowserLang);
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
