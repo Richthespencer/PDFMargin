@@ -3,6 +3,8 @@ import { PDFDocument, PDFPage } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Theme } from './App';
+import lockLockedUrl from './assets/icons/lock-locked.svg?url';
+import lockUnlockedUrl from './assets/icons/lock-unlocked.svg?url';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -324,6 +326,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [isDragOverPreview, setIsDragOverPreview] = useState(false);
   const [isPreviewDragging, setIsPreviewDragging] = useState(false);
+  const [isDragLocked, setIsDragLocked] = useState(false);
 
   const previewWrapRef = useRef<HTMLDivElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -391,7 +394,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     && pageCount > 0
     && (downloadMode === 'all' || selectedPageIndices.length > 0),
   );
-  const canDragPreview = Boolean(fileBytes && selectedPageIndices.length > 0);
+  const canDragPreview = Boolean(fileBytes && selectedPageIndices.length > 0) && !isDragLocked;
 
   async function loadMarginFile(file: File) {
     if (!file) {
@@ -1234,6 +1237,25 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             }}
             onDrop={handlePreviewDrop}
           >
+            {fileBytes ? (
+              <button
+                type="button"
+                className="preview-lock-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsDragLocked((current) => !current);
+                }}
+                aria-label={isDragLocked ? 'Unlock drag' : 'Lock drag'}
+                title={isDragLocked ? 'Unlock drag' : 'Lock drag'}
+              >
+                <img
+                  src={isDragLocked ? lockLockedUrl : lockUnlockedUrl}
+                  alt=""
+                  className="preview-lock-icon"
+                  draggable={false}
+                />
+              </button>
+            ) : null}
             <canvas ref={previewCanvasRef} />
             {!fileBytes ? <div className="empty-state">{ui.previewEmpty}</div> : null}
           </div>

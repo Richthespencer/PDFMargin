@@ -752,6 +752,40 @@ select:focus {
   height: 100%;
 }
 
+.preview-lock-button {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  color: var(--text-subtle);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.preview-lock-button:hover {
+  color: var(--text-main);
+  border-color: var(--chip-hover-border);
+}
+
+.preview-lock-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+:root[data-theme='dark'] .preview-lock-icon {
+  filter: invert(1);
+}
+
 .preview-wrap.is-draggable {
   cursor: grab;
 }
