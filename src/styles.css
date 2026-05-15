@@ -776,6 +776,12 @@ select:focus {
   border-color: var(--chip-hover-border);
 }
 
+.preview-lock-button.is-locked {
+  background: color-mix(in srgb, var(--text-main) 20%, var(--panel-bg));
+  border-color: var(--text-subtle);
+  color: var(--text-main);
+}
+
 .preview-lock-icon {
   width: 18px;
   height: 18px;

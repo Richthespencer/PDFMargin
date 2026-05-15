@@ -1240,7 +1240,7 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
             {fileBytes ? (
               <button
                 type="button"
-                className="preview-lock-button"
+                className={`preview-lock-button ${isDragLocked ? 'is-locked' : ''}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   setIsDragLocked((current) => !current);
