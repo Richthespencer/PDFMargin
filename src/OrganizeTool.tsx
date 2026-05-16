@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PDFDocument, degrees } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
@@ -144,9 +144,10 @@ function createId(prefix: string) {
 type OrganizeToolProps = {
   lang: Lang;
   onToggleLang: () => void;
+  onPdfLoadedChange: (loaded: boolean) => void;
 };
 
-export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) {
+export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: OrganizeToolProps) {
   const [sources, setSources] = useState<OrganizeSource[]>([]);
   const [pages, setPages] = useState<OrganizePage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -188,6 +189,10 @@ export default function OrganizeTool({ lang, onToggleLang }: OrganizeToolProps) 
   const totalPages = pages.length;
   const selectedCount = selectedIds.size;
   const ui = COPY[lang];
+
+  useEffect(() => {
+    onPdfLoadedChange(sources.length > 0);
+  }, [sources.length, onPdfLoadedChange]);
 
   useLayoutEffect(() => {
     setStatus((current) => {

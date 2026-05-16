@@ -10,14 +10,54 @@ function detectBrowserLang(): Lang {
   return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
+function loadPersistedMode(): Mode {
+  try {
+    const saved = localStorage.getItem('pdfmargin-mode');
+    if (saved === 'margin' || saved === 'organize') {
+      return saved;
+    }
+  } catch {}
+  return 'margin';
+}
+
+function loadPersistedTheme(): Theme {
+  try {
+    const saved = localStorage.getItem('pdfmargin-theme');
+    if (saved === 'light' || saved === 'dark') {
+      return saved;
+    }
+  } catch {}
+  return 'light';
+}
+
 export default function App() {
-  const [mode, setMode] = useState<Mode>('margin');
+  const [mode, setMode] = useState<Mode>(loadPersistedMode);
   const [lang, setLang] = useState<Lang>(detectBrowserLang);
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<Theme>(loadPersistedTheme);
+  const [hasPdfLoaded, setHasPdfLoaded] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('pdfmargin-theme', theme); } catch {}
   }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem('pdfmargin-mode', mode); } catch {}
+  }, [mode]);
+
+  useEffect(() => {
+    const confirmMsg: Record<Lang, string> = {
+      zh: '页面即将刷新，未保存的操作将会丢失。确定要刷新吗？',
+      en: 'The page will refresh and unsaved changes will be lost. Continue?',
+    };
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = confirmMsg[lang];
+      return confirmMsg[lang];
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [lang]);
 
   function handleToggleLang() {
     setLang((current) => (current === 'zh' ? 'en' : 'zh'));
@@ -27,20 +67,32 @@ export default function App() {
     setTheme((current) => (current === 'light' ? 'dark' : 'light'));
   }
 
+  function handleModeSwitch(targetMode: Mode) {
+    if (targetMode === mode) return;
+    if (hasPdfLoaded) {
+      const confirmMsg: Record<Lang, string> = {
+        zh: '当前已加载 PDF 文件，切换功能后将丢失当前操作。确定要切换吗？',
+        en: 'A PDF is currently loaded. Switching modes will lose your current work. Continue?',
+      };
+      if (!window.confirm(confirmMsg[lang])) return;
+    }
+    setMode(targetMode);
+  }
+
   return (
     <div className="app-shell">
       <nav className="mode-switch" aria-label="Feature mode selector">
         <button
           type="button"
           className={`mode-switch-button ${mode === 'margin' ? 'active' : ''}`}
-          onClick={() => setMode('margin')}
+          onClick={() => handleModeSwitch('margin')}
         >
           Margin
         </button>
         <button
           type="button"
           className={`mode-switch-button ${mode === 'organize' ? 'active' : ''}`}
-          onClick={() => setMode('organize')}
+          onClick={() => handleModeSwitch('organize')}
         >
           Organize
         </button>
@@ -76,8 +128,8 @@ export default function App() {
         </button>
       </nav>
       {mode === 'margin'
-        ? <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} />
-        : <OrganizeTool lang={lang} onToggleLang={handleToggleLang} />}
+        ? <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} onPdfLoadedChange={setHasPdfLoaded} />
+        : <OrganizeTool lang={lang} onToggleLang={handleToggleLang} onPdfLoadedChange={setHasPdfLoaded} />}
       <footer className="app-footer">
         <span>© 2026 PDFMargin. All rights reserved.</span>
         <a href="https://github.com/Richthespencer/PDFMargin" target="_blank" rel="noreferrer">

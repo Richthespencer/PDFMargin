@@ -297,9 +297,10 @@ type MarginToolProps = {
   lang: Lang;
   onToggleLang: () => void;
   theme: Theme;
+  onPdfLoadedChange: (loaded: boolean) => void;
 };
 
-export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProps) {
+export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChange }: MarginToolProps) {
   const [fileName, setFileName] = useState('');
   const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -349,6 +350,10 @@ export default function MarginTool({ lang, onToggleLang, theme }: MarginToolProp
     startMargins: MarginState;
   } | null>(null);
   const ui = COPY[lang];
+
+  useEffect(() => {
+    onPdfLoadedChange(Boolean(fileBytes));
+  }, [fileBytes, onPdfLoadedChange]);
 
   function isExternalFileDrag(event: React.DragEvent<HTMLElement>) {
     const types = Array.from(event.dataTransfer?.types ?? []);
