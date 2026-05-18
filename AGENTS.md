@@ -26,9 +26,11 @@
 
 ## Browser automated testing
 - Use `agent-browser` for UI testing (requires `agent-browser` CLI installed).
+- **Only run tests when code is modified**; do not re-run unchanged scenarios.
+- **Test only the modified parts**; avoid running full test suites after every change.
 - Start dev server: `npm run dev` (port 5173 or next available).
 - Open browser: `pkill -f agent-browser; sleep 1; agent-browser open http://localhost:5173 --headed && agent-browser set viewport 1920 1080`.
-- Key test scenarios:
+- Key test scenarios (run selectively based on what changed):
   - Mode switching: Margin ↔ Organize, verify localStorage `pdfmargin-mode` persists.
   - Theme toggle: Light ↔ Dark, verify localStorage `pdfmargin-theme` persists.
   - Language switch: 中文 ↔ English, verify UI text changes.
@@ -37,6 +39,11 @@
 - Screenshot naming: `.agent-screenshots/YYYYMMDD-HHMMSS-description.png`.
 - Use `agent-browser eval "localStorage.getItem('pdfmargin-mode')"` to verify persistence.
 - Use `agent-browser snapshot -i -c` to inspect interactive elements with @refs.
+- **Stop testing after verification**; do not loop or repeat checks.
+
+## Git workflow preferences
+- User prefers not pushing to GitHub remote after every change; only push when explicitly requested.
+- Local commits are fine; remote pushes require explicit user instruction.
 
 ## Existing instruction source
 - Keep `.github/copilot-instructions.md` intent intact: preserve existing behavior unless user asks for a change; keep PDF-library changes minimal and browser-safe.
