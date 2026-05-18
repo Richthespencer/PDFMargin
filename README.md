@@ -18,9 +18,11 @@ All processing runs locally in your browser/desktop runtime.
 - Output size supports `Original` (default) plus `A4/A3/A5/Letter/Legal/Tabloid/Custom`
 - Uniform and per-side margins, including negative margin values
 - Drag page content directly in Live Preview to fine-tune margins
+- Preview lock toggle to control drag behavior
 - Download adjusted PDFs or print directly
 - Page range syntax: `1-3,6,9-12`, `all/*`, `odd`, `even`
 - Live preview supports page navigation and drag-and-drop PDF upload
+- Collapsible sections for per-side margins, page range, and download scope
 - Download modes:
   - All pages (apply margins only to selected pages)
   - Selected pages only
@@ -40,7 +42,9 @@ All processing runs locally in your browser/desktop runtime.
 
 ### UX and Platforms
 
-- Bilingual UI (Chinese/English, globally synced)
+- Auto-detect browser language for default UI language (Chinese/English)
+- Persist mode and theme state across page refresh
+- Confirmation dialogs for mode switching and page refresh
 - Light/Dark theme toggle (default: light)
 - Available for Web, Tauri desktop, and Chrome Extension
 
