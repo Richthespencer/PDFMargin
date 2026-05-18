@@ -24,5 +24,19 @@
   - `selected`: export only selected indices.
 - Organize mode intentionally does not apply margins; it exports pages exactly in the current list order after drag/drop and deletions.
 
+## Browser automated testing
+- Use `agent-browser` for UI testing (requires `agent-browser` CLI installed).
+- Start dev server: `npm run dev` (port 5173 or next available).
+- Open browser: `pkill -f agent-browser; sleep 1; agent-browser open http://localhost:5173 --headed && agent-browser set viewport 1920 1080`.
+- Key test scenarios:
+  - Mode switching: Margin ↔ Organize, verify localStorage `pdfmargin-mode` persists.
+  - Theme toggle: Light ↔ Dark, verify localStorage `pdfmargin-theme` persists.
+  - Language switch: 中文 ↔ English, verify UI text changes.
+  - State persistence: After `agent-browser reload`, verify mode/theme/language persist.
+  - Collapsible sections: Expand/collapse per-side margins, page range, download scope.
+- Screenshot naming: `.agent-screenshots/YYYYMMDD-HHMMSS-description.png`.
+- Use `agent-browser eval "localStorage.getItem('pdfmargin-mode')"` to verify persistence.
+- Use `agent-browser snapshot -i -c` to inspect interactive elements with @refs.
+
 ## Existing instruction source
 - Keep `.github/copilot-instructions.md` intent intact: preserve existing behavior unless user asks for a change; keep PDF-library changes minimal and browser-safe.
