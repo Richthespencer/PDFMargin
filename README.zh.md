@@ -4,6 +4,8 @@
 
 Chrome 应用商店页面：https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpioipomonnfkoiinejeljip
 
+在线体验：https://richthespencer.github.io/PDFMargin/
+
 PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
 
 - `Margin`：解决“打印边缘被裁切”问题，调整边距后下载或打印
