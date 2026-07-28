@@ -45,6 +45,7 @@ const COPY = {
     statusCleared: '已清除当前页面，可重新上传 PDF',
     readFail: (message: string) => `读取 PDF 失败：${message}`,
     exportFail: (message: string) => `导出失败：${message}`,
+    rasterizeCanvasFail: '加密 PDF 页面无法渲染为图片',
     eyebrow: 'PDF Organizer',
     heroTitle: '合并、拖动排序、删除页面',
     heroSubtitle: '上传多个 PDF，将所有页面放在一个贴片墙中，自由拖拽调整顺序并按当前结果导出。',
@@ -100,6 +101,7 @@ const COPY = {
     statusCleared: 'All current pages cleared, ready to upload again',
     readFail: (message: string) => `Failed to read PDF: ${message}`,
     exportFail: (message: string) => `Export failed: ${message}`,
+    rasterizeCanvasFail: 'Failed to render encrypted PDF page to image',
     eyebrow: 'PDF Organizer',
     heroTitle: 'Merge PDFs, reorder pages, and delete pages',
     heroSubtitle: 'Upload, reorder, and export pages.',
@@ -795,6 +797,98 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     selectedIdsRef.current = new Set();
   }
 
+  type PdfDocProxy = Awaited<ReturnType<typeof getDocument>['promise']>;
+
+  async function rasterizePageToImage(
+    pdfjsDoc: PdfDocProxy,
+    pageIndex: number,
+    outputDoc: PDFDocument,
+  ) {
+    const pdfjsPage = await pdfjsDoc.getPage(pageIndex + 1);
+    const renderScale = 2.5;
+    const viewport = pdfjsPage.getViewport({ scale: renderScale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error(ui.rasterizeCanvasFail);
+    }
+    await pdfjsPage
+      .render({ canvasContext: ctx, viewport } as Parameters<typeof pdfjsPage.render>[0])
+      .promise;
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1] ?? '';
+    const pngBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const image = await outputDoc.embedPng(pngBytes);
+    const baseViewport = pdfjsPage.getViewport({ scale: 1 });
+    return {
+      image,
+      width: baseViewport.width,
+      height: baseViewport.height,
+    };
+  }
+
+  async function buildOrganizePdf(): Promise<Uint8Array> {
+    const sourceById = new Map(sources.map((source) => [source.id, source] as const));
+    const sourceDocs = new Map<string, PDFDocument>();
+    const encryptedSourceIds = new Set<string>();
+    for (const source of sources) {
+      const doc = await PDFDocument.load(new Uint8Array(source.bytes), { ignoreEncryption: true });
+      sourceDocs.set(source.id, doc);
+      if (doc.isEncrypted) {
+        encryptedSourceIds.add(source.id);
+      }
+    }
+
+    const outputDoc = await PDFDocument.create();
+    const pdfjsDocs = new Map<string, PdfDocProxy>();
+
+    for (const page of pages) {
+      const source = sourceById.get(page.sourceId);
+      if (!source) {
+        continue;
+      }
+
+      if (encryptedSourceIds.has(page.sourceId)) {
+        let pdfjsDoc = pdfjsDocs.get(source.id);
+        if (!pdfjsDoc) {
+          pdfjsDoc = await getDocument({ data: new Uint8Array(source.bytes) }).promise;
+          pdfjsDocs.set(source.id, pdfjsDoc);
+        }
+        const { image, width, height } = await rasterizePageToImage(pdfjsDoc, page.sourcePageIndex, outputDoc);
+        const newPage = outputDoc.addPage([width, height]);
+        newPage.drawImage(image, { x: 0, y: 0, width, height });
+        newPage.setRotation(degrees(page.rotation));
+      } else {
+        const sourceDoc = sourceDocs.get(page.sourceId);
+        if (!sourceDoc) {
+          continue;
+        }
+        const copied = await outputDoc.copyPages(sourceDoc, [page.sourcePageIndex]);
+        const outputPage = copied[0];
+        outputPage.setRotation(degrees(page.rotation));
+        outputDoc.addPage(outputPage);
+      }
+    }
+
+    for (const doc of pdfjsDocs.values()) {
+      try {
+        await doc.destroy();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+
+    return outputDoc.save();
+  }
+
+  function finalizeOutputBlob(outputBytes: Uint8Array): Blob {
+    const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
+    new Uint8Array(outputBuffer).set(outputBytes);
+    return new Blob([outputBuffer], { type: 'application/pdf' });
+  }
+
   async function handleExport() {
     if (pages.length === 0) {
       setStatus(ui.statusNoPages);
@@ -806,28 +900,8 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     setStatus(ui.statusExporting);
 
     try {
-      const sourceDocs = new Map<string, PDFDocument>();
-      for (const source of sources) {
-        sourceDocs.set(source.id, await PDFDocument.load(new Uint8Array(source.bytes)));
-      }
-
-      const outputDoc = await PDFDocument.create();
-      for (const page of pages) {
-        const sourceDoc = sourceDocs.get(page.sourceId);
-        if (!sourceDoc) {
-          continue;
-        }
-        const copied = await outputDoc.copyPages(sourceDoc, [page.sourcePageIndex]);
-        const outputPage = copied[0];
-        outputPage.setRotation(degrees(page.rotation));
-        outputDoc.addPage(outputPage);
-      }
-
-      const outputBytes = await outputDoc.save();
-      const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
-      new Uint8Array(outputBuffer).set(outputBytes);
-      const blob = new Blob([outputBuffer], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const outputBytes = await buildOrganizePdf();
+      const url = URL.createObjectURL(finalizeOutputBlob(outputBytes));
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `organized-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.pdf`;
@@ -854,28 +928,8 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     setStatus(ui.statusExporting);
 
     try {
-      const sourceDocs = new Map<string, PDFDocument>();
-      for (const source of sources) {
-        sourceDocs.set(source.id, await PDFDocument.load(new Uint8Array(source.bytes)));
-      }
-
-      const outputDoc = await PDFDocument.create();
-      for (const page of pages) {
-        const sourceDoc = sourceDocs.get(page.sourceId);
-        if (!sourceDoc) {
-          continue;
-        }
-        const copied = await outputDoc.copyPages(sourceDoc, [page.sourcePageIndex]);
-        const outputPage = copied[0];
-        outputPage.setRotation(degrees(page.rotation));
-        outputDoc.addPage(outputPage);
-      }
-
-      const outputBytes = await outputDoc.save();
-      const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
-      new Uint8Array(outputBuffer).set(outputBytes);
-      const blob = new Blob([outputBuffer], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const outputBytes = await buildOrganizePdf();
+      const url = URL.createObjectURL(finalizeOutputBlob(outputBytes));
       const printWindow = window.open(url, '_blank');
       if (printWindow) {
         printWindow.addEventListener('load', () => {

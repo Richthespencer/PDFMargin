@@ -109,6 +109,7 @@ const COPY = {
     statusDone: 'PDF 已生成并开始下载',
     statusPrintReady: '已打开打印窗口',
     statusOutputFail: '生成失败，请稍后重试',
+    rasterizeCanvasFail: '加密 PDF 页面无法渲染为图片',
     statusFileReadFail: '文件读取失败',
     outputSizeInfo: '目标尺寸',
     originalSize: '原始首页尺寸约为',
@@ -169,6 +170,7 @@ const COPY = {
     statusDone: 'PDF generated and download started',
     statusPrintReady: 'Print window opened',
     statusOutputFail: 'Generation failed, please try again later',
+    rasterizeCanvasFail: 'Failed to render encrypted PDF page to image',
     statusFileReadFail: 'File read failed',
     outputSizeInfo: 'Target size',
     originalSize: 'Approximate first-page size',
@@ -685,6 +687,125 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     theme,
   ]);
 
+  type PdfDocProxy = Awaited<ReturnType<typeof getDocument>['promise']>;
+
+  async function rasterizeSourcePage(pdfjsDoc: PdfDocProxy, pageIndex: number, outputDoc: PDFDocument) {
+    const pdfjsPage = await pdfjsDoc.getPage(pageIndex + 1);
+    const renderScale = 2.5;
+    const viewport = pdfjsPage.getViewport({ scale: renderScale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error(ui.rasterizeCanvasFail);
+    }
+    await pdfjsPage
+      .render({ canvasContext: ctx, viewport } as Parameters<typeof pdfjsPage.render>[0])
+      .promise;
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1] ?? '';
+    const pngBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const image = await outputDoc.embedPng(pngBytes);
+    const baseViewport = pdfjsPage.getViewport({ scale: 1 });
+    return { image, width: baseViewport.width, height: baseViewport.height };
+  }
+
+  async function buildMarginPdf(): Promise<Uint8Array | null> {
+    if (!fileBytes) {
+      return null;
+    }
+
+    const sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes), { ignoreEncryption: true });
+    const outputDoc = await PDFDocument.create();
+    const outputWidth = pageSizePt.width;
+    const outputHeight = pageSizePt.height;
+    const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
+    const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
+    const sourcePageCount = sourceDoc.getPageCount();
+    const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
+
+    if (downloadMode === 'selected' && safePageIndices.length === 0) {
+      return null;
+    }
+
+    const transformPageWithMargin = (page: PDFPage) => {
+      const sourceSize = page.getSize();
+      const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
+      const drawWidth = sourceSize.width * scale;
+      const drawHeight = sourceSize.height * scale;
+      const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
+      const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
+      page.setSize(outputWidth, outputHeight);
+      page.scaleContent(scale, scale);
+      page.scaleAnnotations(scale, scale);
+      page.translateContent(x, y);
+    };
+
+    if (sourceDoc.isEncrypted) {
+      const pdfjsDoc = await getDocument({ data: new Uint8Array(fileBytes) }).promise;
+      const drawImageWithMargin = (
+        page: PDFPage,
+        image: Awaited<ReturnType<typeof outputDoc.embedPng>>,
+        srcWidth: number,
+        srcHeight: number,
+      ) => {
+        const scale = Math.min(contentWidth / srcWidth, contentHeight / srcHeight);
+        const drawWidth = srcWidth * scale;
+        const drawHeight = srcHeight * scale;
+        const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
+        const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
+        page.drawImage(image, { x, y, width: drawWidth, height: drawHeight });
+      };
+
+      try {
+        if (downloadMode === 'selected') {
+          for (const index of safePageIndices) {
+            const { image, width, height } = await rasterizeSourcePage(pdfjsDoc, index, outputDoc);
+            const page = outputDoc.addPage([outputWidth, outputHeight]);
+            drawImageWithMargin(page, image, width, height);
+          }
+        } else {
+          const selectedSet = new Set(safePageIndices);
+          for (let index = 0; index < sourcePageCount; index += 1) {
+            const { image, width, height } = await rasterizeSourcePage(pdfjsDoc, index, outputDoc);
+            if (selectedSet.has(index)) {
+              const page = outputDoc.addPage([outputWidth, outputHeight]);
+              drawImageWithMargin(page, image, width, height);
+            } else {
+              const page = outputDoc.addPage([width, height]);
+              page.drawImage(image, { x: 0, y: 0, width, height });
+            }
+          }
+        }
+      } finally {
+        try {
+          await pdfjsDoc.destroy();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    } else if (downloadMode === 'selected') {
+      const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
+      copiedPages.forEach((page) => {
+        outputDoc.addPage(page);
+        transformPageWithMargin(page);
+      });
+    } else {
+      const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
+      const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
+      const selectedSet = new Set(safePageIndices);
+      copiedPages.forEach((page, pageIndex) => {
+        outputDoc.addPage(page);
+        if (selectedSet.has(pageIndex)) {
+          transformPageWithMargin(page);
+        }
+      });
+    }
+
+    return outputDoc.save();
+  }
+
   async function handleDownload() {
     if (!fileBytes) {
       return;
@@ -693,52 +814,11 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     try {
       setIsRendering(true);
       setStatus(ui.statusOutputting);
-      const sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes));
-      const outputDoc = await PDFDocument.create();
-      const outputWidth = pageSizePt.width;
-      const outputHeight = pageSizePt.height;
-      const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
-      const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
-      const sourcePageCount = sourceDoc.getPageCount();
-      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
-
-      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+      const outputBytes = await buildMarginPdf();
+      if (!outputBytes) {
         setStatus(ui.statusPageRangeEmpty);
         return;
       }
-
-      const transformPageWithMargin = (page: PDFPage) => {
-        const sourceSize = page.getSize();
-        const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
-        const drawWidth = sourceSize.width * scale;
-        const drawHeight = sourceSize.height * scale;
-        const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
-        const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
-        page.setSize(outputWidth, outputHeight);
-        page.scaleContent(scale, scale);
-        page.scaleAnnotations(scale, scale);
-        page.translateContent(x, y);
-      };
-
-      if (downloadMode === 'selected') {
-        const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
-        copiedPages.forEach((page) => {
-          outputDoc.addPage(page);
-          transformPageWithMargin(page);
-        });
-      } else {
-        const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
-        const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
-        const selectedSet = new Set(safePageIndices);
-        copiedPages.forEach((page, pageIndex) => {
-          outputDoc.addPage(page);
-          if (selectedSet.has(pageIndex)) {
-            transformPageWithMargin(page);
-          }
-        });
-      }
-
-      const outputBytes = await outputDoc.save();
       const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
       new Uint8Array(outputBuffer).set(outputBytes);
       const blob = new Blob([outputBuffer], { type: 'application/pdf' });
@@ -770,52 +850,11 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     try {
       setIsRendering(true);
       setStatus(ui.statusOutputting);
-      const sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes));
-      const outputDoc = await PDFDocument.create();
-      const outputWidth = pageSizePt.width;
-      const outputHeight = pageSizePt.height;
-      const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
-      const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
-      const sourcePageCount = sourceDoc.getPageCount();
-      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
-
-      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+      const outputBytes = await buildMarginPdf();
+      if (!outputBytes) {
         setStatus(ui.statusPageRangeEmpty);
         return;
       }
-
-      const transformPageWithMargin = (page: PDFPage) => {
-        const sourceSize = page.getSize();
-        const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
-        const drawWidth = sourceSize.width * scale;
-        const drawHeight = sourceSize.height * scale;
-        const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
-        const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
-        page.setSize(outputWidth, outputHeight);
-        page.scaleContent(scale, scale);
-        page.scaleAnnotations(scale, scale);
-        page.translateContent(x, y);
-      };
-
-      if (downloadMode === 'selected') {
-        const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
-        copiedPages.forEach((page) => {
-          outputDoc.addPage(page);
-          transformPageWithMargin(page);
-        });
-      } else {
-        const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
-        const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
-        const selectedSet = new Set(safePageIndices);
-        copiedPages.forEach((page, pageIndex) => {
-          outputDoc.addPage(page);
-          if (selectedSet.has(pageIndex)) {
-            transformPageWithMargin(page);
-          }
-        });
-      }
-
-      const outputBytes = await outputDoc.save();
       const outputBuffer = new ArrayBuffer(outputBytes.byteLength);
       new Uint8Array(outputBuffer).set(outputBytes);
       const blob = new Blob([outputBuffer], { type: 'application/pdf' });
