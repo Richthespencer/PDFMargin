@@ -5,6 +5,7 @@ import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Theme } from './App';
 import lockLockedUrl from './assets/icons/lock-locked.svg?url';
 import lockUnlockedUrl from './assets/icons/lock-unlocked.svg?url';
+import { checkPasswordException, savePdfWithOptionalEncryption } from './pdfEncryption';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -116,6 +117,14 @@ const COPY = {
     pagesLoaded: (pages: number) => `${pages} 页`,
     pagesNotLoaded: '未加载',
     useCurrentMargin: '20 mm',
+    passwordTitle: '需要密码解锁 PDF',
+    passwordDesc: (name: string) => `“${name}”受密码保护，请输入密码以解锁加载。`,
+    passwordPlaceholder: '请输入 PDF 密码',
+    passwordUnlock: '解锁',
+    passwordCancel: '取消',
+    passwordIncorrect: '密码错误，请重新输入。',
+    statusPasswordRequired: '等待输入 PDF 密码...',
+    keepEncryptionLabel: '保留 PDF 加密（取消勾选则移除加密）',
   },
   en: {
     heroTitle: 'Add margins to PDFs and preview the result in real time',
@@ -177,6 +186,14 @@ const COPY = {
     pagesLoaded: (pages: number) => `${pages} pages`,
     pagesNotLoaded: 'Not loaded',
     useCurrentMargin: '20 mm',
+    passwordTitle: 'Password required to unlock PDF',
+    passwordDesc: (name: string) => `"${name}" is password-protected. Please enter the password to unlock it.`,
+    passwordPlaceholder: 'Enter PDF password',
+    passwordUnlock: 'Unlock',
+    passwordCancel: 'Cancel',
+    passwordIncorrect: 'Incorrect password, please try again.',
+    statusPasswordRequired: 'Waiting for PDF password...',
+    keepEncryptionLabel: 'Keep PDF encryption (uncheck to remove encryption)',
   },
 } as const;
 
@@ -218,8 +235,11 @@ function getPageSizeMm(
   return { widthMm: selected.widthMm, heightMm: selected.heightMm };
 }
 
-async function loadPagePreview(bytes: Uint8Array, pageNumber: number) {
-  const pdf = await getDocument({ data: bytes }).promise;
+async function loadPagePreview(bytes: Uint8Array, pageNumber: number, password?: string) {
+  const pdf = await getDocument({
+    data: bytes,
+    ...(password ? { password } : {}),
+  }).promise;
   const page = await pdf.getPage(pageNumber);
   return { pdf, page };
 }
@@ -330,6 +350,13 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   const [isDragOverPreview, setIsDragOverPreview] = useState(false);
   const [isPreviewDragging, setIsPreviewDragging] = useState(false);
   const [isDragLocked, setIsDragLocked] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState('');
+  const [isPdfEncrypted, setIsPdfEncrypted] = useState(false);
+  const [keepEncryption, setKeepEncryption] = useState(true);
+  const [pendingFile, setPendingFile] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   const previewWrapRef = useRef<HTMLDivElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -403,29 +430,77 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   );
   const canDragPreview = Boolean(fileBytes && selectedPageIndices.length > 0) && !isDragLocked;
 
+  async function tryLoadMarginBytes(name: string, bytes: Uint8Array, password = '') {
+    try {
+      const previewBytes = new Uint8Array(bytes);
+      const pdf = await getDocument({
+        data: previewBytes,
+        ...(password ? { password } : {}),
+      }).promise;
+      let docEncrypted = Boolean(password);
+      if (!docEncrypted) {
+        try {
+          const checkDoc = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true });
+          docEncrypted = checkDoc.isEncrypted;
+        } catch {
+          // ignore
+        }
+      }
+      const firstPage = await pdf.getPage(1);
+      const size = firstPage.getViewport({ scale: 1 });
+      setFileName(name);
+      setFileBytes(bytes);
+      setPdfPassword(password);
+      setIsPdfEncrypted(docEncrypted);
+      setKeepEncryption(true);
+      setPageCount(pdf.numPages);
+      setPageRangeInput('');
+      setPreviewPageIndex(0);
+      setOriginalWidthMm(ptToMm(size.width));
+      setOriginalHeightMm(ptToMm(size.height));
+      setPendingFile(null);
+      setPasswordInput('');
+      setPasswordError('');
+      setStatus(ui.statusLoaded(pdf.numPages));
+      await pdf.destroy();
+    } catch (error) {
+      const pwCheck = checkPasswordException(error);
+      if (pwCheck.isPasswordException) {
+        setPendingFile({ name, bytes });
+        if (password || pwCheck.isIncorrectPassword) {
+          setPasswordError(ui.passwordIncorrect);
+        } else {
+          setPasswordError('');
+          setPasswordInput('');
+        }
+        setStatus(ui.statusPasswordRequired);
+        return;
+      }
+      setPendingFile(null);
+      setPasswordInput('');
+      setPasswordError('');
+      setFileBytes(null);
+      setPdfPassword('');
+      setIsPdfEncrypted(false);
+      setPageCount(0);
+      setFileName('');
+      setPreviewError(lang === 'zh' ? 'PDF 读取失败，请重新选择文件。' : 'PDF failed to load. Please choose another file.');
+      setStatus(ui.statusFileReadFail);
+    }
+  }
+
   async function loadMarginFile(file: File) {
     if (!file) {
       return;
     }
 
-    setFileName(file.name);
     setStatus(ui.statusReading);
     setPreviewError('');
 
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      setFileBytes(bytes);
-      const previewBytes = new Uint8Array(bytes);
-      const pdf = await getDocument({ data: previewBytes }).promise;
-      setPageCount(pdf.numPages);
-      setPageRangeInput('');
-      setPreviewPageIndex(0);
-      const firstPage = await pdf.getPage(1);
-      const size = firstPage.getViewport({ scale: 1 });
-      setOriginalWidthMm(ptToMm(size.width));
-      setOriginalHeightMm(ptToMm(size.height));
-      setStatus(ui.statusLoaded(pdf.numPages));
-    } catch (error) {
+      await tryLoadMarginBytes(file.name, bytes, '');
+    } catch {
       setFileBytes(null);
       setPageCount(0);
       setFileName('');
@@ -434,8 +509,33 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     }
   }
 
+  async function handleUnlockSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!pendingFile || isUnlocking) {
+      return;
+    }
+    if (!passwordInput) {
+      setPasswordError(ui.passwordIncorrect);
+      return;
+    }
+    setIsUnlocking(true);
+    try {
+      await tryLoadMarginBytes(pendingFile.name, pendingFile.bytes, passwordInput);
+    } finally {
+      setIsUnlocking(false);
+    }
+  }
+
+  function handleUnlockCancel() {
+    setPendingFile(null);
+    setPasswordInput('');
+    setPasswordError('');
+    setStatus(fileBytes ? ui.statusPreviewReady(pageCount) : ui.statusWaiting);
+  }
+
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) {
       return;
     }
@@ -495,7 +595,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
       setPreviewError('');
 
       try {
-        const { pdf, page } = await loadPagePreview(new Uint8Array(fileBytes), previewPageNumber);
+        const { pdf, page } = await loadPagePreview(new Uint8Array(fileBytes), previewPageNumber, pdfPassword);
         if (cancelled) {
           pdf.destroy();
           return;
@@ -551,6 +651,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   }, [
     fileBytes,
     lang,
+    pdfPassword,
     previewPageNumber,
     selectedPageIndices.length,
     ui.statusPageRangeEmpty,
@@ -711,23 +812,27 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     return { image, width: baseViewport.width, height: baseViewport.height };
   }
 
-  async function buildMarginPdf(): Promise<Uint8Array | null> {
+  async function buildMarginPdf(options?: { forPrint?: boolean }): Promise<Uint8Array | null> {
     if (!fileBytes) {
       return null;
     }
 
-    const sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes), { ignoreEncryption: true });
+    let sourceDoc: PDFDocument | null = null;
+    let encrypted = isPdfEncrypted;
+    try {
+      sourceDoc = await PDFDocument.load(new Uint8Array(fileBytes), { ignoreEncryption: true });
+      if (sourceDoc.isEncrypted) {
+        encrypted = true;
+      }
+    } catch {
+      encrypted = true;
+    }
+
     const outputDoc = await PDFDocument.create();
     const outputWidth = pageSizePt.width;
     const outputHeight = pageSizePt.height;
     const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
     const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
-    const sourcePageCount = sourceDoc.getPageCount();
-    const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
-
-    if (downloadMode === 'selected' && safePageIndices.length === 0) {
-      return null;
-    }
 
     const transformPageWithMargin = (page: PDFPage) => {
       const sourceSize = page.getSize();
@@ -742,8 +847,18 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
       page.translateContent(x, y);
     };
 
-    if (sourceDoc.isEncrypted) {
-      const pdfjsDoc = await getDocument({ data: new Uint8Array(fileBytes) }).promise;
+    if (encrypted || !sourceDoc) {
+      const pdfjsDoc = await getDocument({
+        data: new Uint8Array(fileBytes),
+        ...(pdfPassword ? { password: pdfPassword } : {}),
+      }).promise;
+      const sourcePageCount = pdfjsDoc.numPages;
+      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
+      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+        await pdfjsDoc.destroy();
+        return null;
+      }
+
       const drawImageWithMargin = (
         page: PDFPage,
         image: Awaited<ReturnType<typeof outputDoc.embedPng>>,
@@ -785,25 +900,36 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
           // ignore cleanup errors
         }
       }
-    } else if (downloadMode === 'selected') {
-      const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
-      copiedPages.forEach((page) => {
-        outputDoc.addPage(page);
-        transformPageWithMargin(page);
-      });
     } else {
-      const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
-      const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
-      const selectedSet = new Set(safePageIndices);
-      copiedPages.forEach((page, pageIndex) => {
-        outputDoc.addPage(page);
-        if (selectedSet.has(pageIndex)) {
+      const sourcePageCount = sourceDoc.getPageCount();
+      const safePageIndices = selectedPageIndices.filter((index) => index >= 0 && index < sourcePageCount);
+      if (downloadMode === 'selected' && safePageIndices.length === 0) {
+        return null;
+      }
+      if (downloadMode === 'selected') {
+        const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
+        copiedPages.forEach((page) => {
+          outputDoc.addPage(page);
           transformPageWithMargin(page);
-        }
-      });
+        });
+      } else {
+        const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
+        const copiedPages = await outputDoc.copyPages(sourceDoc, allPageIndices);
+        const selectedSet = new Set(safePageIndices);
+        copiedPages.forEach((page, pageIndex) => {
+          outputDoc.addPage(page);
+          if (selectedSet.has(pageIndex)) {
+            transformPageWithMargin(page);
+          }
+        });
+      }
     }
 
-    return outputDoc.save();
+    const shouldEncrypt = !options?.forPrint && encrypted && keepEncryption;
+    return savePdfWithOptionalEncryption(
+      outputDoc,
+      shouldEncrypt ? { encryptPassword: pdfPassword } : undefined,
+    );
   }
 
   async function handleDownload() {
@@ -850,7 +976,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     try {
       setIsRendering(true);
       setStatus(ui.statusOutputting);
-      const outputBytes = await buildMarginPdf();
+      const outputBytes = await buildMarginPdf({ forPrint: true });
       if (!outputBytes) {
         setStatus(ui.statusPageRangeEmpty);
         return;
@@ -1199,6 +1325,17 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
             </div>
           </div>
 
+          {fileBytes && isPdfEncrypted ? (
+            <label className="encryption-checkbox-row">
+              <input
+                type="checkbox"
+                checked={keepEncryption}
+                onChange={(event) => setKeepEncryption(event.target.checked)}
+              />
+              <span>{ui.keepEncryptionLabel}</span>
+            </label>
+          ) : null}
+
           <div className="action-row margin-action-row">
             <button className="primary-button" type="button" onClick={handleDownload} disabled={!canProcess || isRendering}>
               {isRendering ? ui.processing : downloadMode === 'all' ? ui.downloadAll : ui.downloadSelected}
@@ -1305,6 +1442,36 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
           </div>
         </section>
       </main>
+
+      {pendingFile ? (
+        <div className="password-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="margin-password-title">
+          <form className="password-modal" onSubmit={handleUnlockSubmit}>
+            <h3 id="margin-password-title">{ui.passwordTitle}</h3>
+            <p>{ui.passwordDesc(pendingFile.name)}</p>
+            <input
+              type="password"
+              value={passwordInput}
+              placeholder={ui.passwordPlaceholder}
+              onChange={(event) => {
+                setPasswordInput(event.target.value);
+                if (passwordError) {
+                  setPasswordError('');
+                }
+              }}
+              autoFocus
+            />
+            {passwordError ? <p className="error-text">{passwordError}</p> : null}
+            <div className="password-modal-actions">
+              <button type="button" className="secondary-button" onClick={handleUnlockCancel} disabled={isUnlocking}>
+                {ui.passwordCancel}
+              </button>
+              <button type="submit" className="primary-button" disabled={isUnlocking}>
+                {isUnlocking ? ui.processing : ui.passwordUnlock}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

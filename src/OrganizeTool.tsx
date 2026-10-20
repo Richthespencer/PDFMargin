@@ -3,6 +3,7 @@ import { PDFDocument, degrees } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Lang } from './MarginTool';
+import { checkPasswordException, savePdfWithOptionalEncryption } from './pdfEncryption';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -11,6 +12,8 @@ type OrganizeSource = {
   name: string;
   bytes: Uint8Array;
   pageCount: number;
+  isEncrypted: boolean;
+  password?: string;
 };
 
 type OrganizePage = {
@@ -80,6 +83,14 @@ const COPY = {
     confirmRemove: '确认删除',
     ariaList: 'Organized PDF pages',
     thumbAlt: (name: string, page: number) => `${name} 第 ${page} 页`,
+    passwordTitle: '需要密码解锁 PDF',
+    passwordDesc: (name: string) => `“${name}”受密码保护，请输入密码以解锁加载。`,
+    passwordPlaceholder: '请输入 PDF 密码',
+    passwordUnlock: '解锁',
+    passwordCancel: '取消',
+    passwordIncorrect: '密码错误，请重新输入。',
+    statusPasswordRequired: '等待输入 PDF 密码...',
+    keepEncryptionLabel: '保留 PDF 加密（取消勾选则移除加密）',
   },
   en: {
     statusReady: 'Upload multiple PDFs to drag, reorder, and remove pages',
@@ -136,6 +147,14 @@ const COPY = {
     confirmRemove: 'Confirm',
     ariaList: 'Organized PDF pages',
     thumbAlt: (name: string, page: number) => `${name} page ${page}`,
+    passwordTitle: 'Password required to unlock PDF',
+    passwordDesc: (name: string) => `"${name}" is password-protected. Please enter the password to unlock it.`,
+    passwordPlaceholder: 'Enter PDF password',
+    passwordUnlock: 'Unlock',
+    passwordCancel: 'Cancel',
+    passwordIncorrect: 'Incorrect password, please try again.',
+    statusPasswordRequired: 'Waiting for PDF password...',
+    keepEncryptionLabel: 'Keep PDF encryption (uncheck to remove encryption)',
   },
 } as const;
 
@@ -182,6 +201,13 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
   const lastMoveRef = useRef<{ from: number; to: number; at: number } | null>(null);
   const dragStartPagesRef = useRef<OrganizePage[] | null>(null);
   const ignoreClickUntilRef = useRef(0);
+  const [keepEncryption, setKeepEncryption] = useState(true);
+  const [passwordModal, setPasswordModal] = useState<{
+    fileName: string;
+    error: string;
+    resolve: (password: string | null) => void;
+  } | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
 
   function isExternalFileDrag(event: React.DragEvent<HTMLElement>) {
     const types = Array.from(event.dataTransfer?.types ?? []);
@@ -216,6 +242,22 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     });
     return map;
   }, [pages]);
+
+  const encryptedSourceInfo = useMemo(() => {
+    const sourceById = new Map(sources.map((s) => [s.id, s] as const));
+    for (const page of pages) {
+      const src = sourceById.get(page.sourceId);
+      if (src?.isEncrypted) {
+        return { isEncrypted: true, password: src.password ?? '' };
+      }
+    }
+    for (const src of sources) {
+      if (src.isEncrypted) {
+        return { isEncrypted: true, password: src.password ?? '' };
+      }
+    }
+    return { isEncrypted: false, password: '' };
+  }, [pages, sources]);
 
   useLayoutEffect(() => {
     if (!shouldAnimateRef.current || !previousRectsRef.current) {
@@ -429,9 +471,83 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     reorderWhileDragging(targetId, getPlacementFromPointer(targetId, event));
   }
 
-  async function handleFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const fileList = event.target.files;
-    if (!fileList || fileList.length === 0) {
+  function requestFilePassword(fileName: string, errorMessage = ''): Promise<string | null> {
+    setPasswordInput('');
+    setStatus(ui.statusPasswordRequired);
+    return new Promise((resolve) => {
+      setPasswordModal({
+        fileName,
+        error: errorMessage,
+        resolve,
+      });
+    });
+  }
+
+  function handlePasswordModalSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!passwordModal) {
+      return;
+    }
+    if (!passwordInput) {
+      setPasswordModal((current) => (current ? { ...current, error: ui.passwordIncorrect } : null));
+      return;
+    }
+    const { resolve } = passwordModal;
+    const submitted = passwordInput;
+    setPasswordModal(null);
+    setPasswordInput('');
+    resolve(submitted);
+  }
+
+  function handlePasswordModalCancel() {
+    if (!passwordModal) {
+      return;
+    }
+    const { resolve } = passwordModal;
+    setPasswordModal(null);
+    setPasswordInput('');
+    resolve(null);
+  }
+
+  async function openPdfWithPassword(name: string, bytes: Uint8Array) {
+    let password = '';
+    let showError = false;
+    while (true) {
+      try {
+        const previewDoc = await getDocument({
+          data: new Uint8Array(bytes),
+          ...(password ? { password } : {}),
+        }).promise;
+        let isEncrypted = Boolean(password);
+        if (!isEncrypted) {
+          try {
+            const checkDoc = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true });
+            isEncrypted = checkDoc.isEncrypted;
+          } catch {
+            isEncrypted = true;
+          }
+        }
+        return { previewDoc, password, isEncrypted };
+      } catch (err) {
+        const pwCheck = checkPasswordException(err);
+        if (!pwCheck.isPasswordException) {
+          throw err;
+        }
+        const nextPw = await requestFilePassword(
+          name,
+          showError || pwCheck.isIncorrectPassword ? ui.passwordIncorrect : '',
+        );
+        if (nextPw === null) {
+          return null;
+        }
+        password = nextPw;
+        showError = true;
+      }
+    }
+  }
+
+  async function loadFilesList(selectedFiles: File[]) {
+    if (selectedFiles.length === 0) {
       return;
     }
 
@@ -442,19 +558,29 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     setStatus(ui.statusReading);
 
     try {
-      const selectedFiles = Array.from(fileList);
       const nextSources: OrganizeSource[] = [];
       const nextPages: OrganizePage[] = [];
-
       let lastProgressUpdate = 0;
 
       for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex += 1) {
         const file = selectedFiles[fileIndex];
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const previewDoc = await getDocument({ data: new Uint8Array(bytes) }).promise;
+        const opened = await openPdfWithPassword(file.name, bytes);
+        if (!opened) {
+          continue;
+        }
+        setStatus(ui.statusReading);
+        const { previewDoc, password, isEncrypted } = opened;
         const sourceId = createId('source');
         const pageCount = previewDoc.numPages;
-        nextSources.push({ id: sourceId, name: file.name, bytes, pageCount });
+        nextSources.push({
+          id: sourceId,
+          name: file.name,
+          bytes,
+          pageCount,
+          isEncrypted,
+          ...(password ? { password } : {}),
+        });
 
         for (let index = 0; index < pageCount; index += 1) {
           const now = performance.now();
@@ -503,9 +629,16 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
         previewDoc.destroy();
       }
 
-      setSources((current) => [...current, ...nextSources]);
-      setPages((current) => [...current, ...nextPages]);
-      setStatus(ui.statusReadDone(nextSources.length, nextPages.length));
+      if (nextSources.length > 0) {
+        if (nextSources.some((s) => s.isEncrypted) && !sources.some((s) => s.isEncrypted)) {
+          setKeepEncryption(true);
+        }
+        setSources((current) => [...current, ...nextSources]);
+        setPages((current) => [...current, ...nextPages]);
+        setStatus(ui.statusReadDone(nextSources.length, nextPages.length));
+      } else {
+        setStatus(pages.length > 0 ? ui.statusOrderUpdated : ui.statusReady);
+      }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : String(loadError);
       setError(ui.readFail(message));
@@ -514,8 +647,17 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
       setIsLoadingFiles(false);
       setLoadingProgress(null);
       setIsProcessing(false);
-      event.target.value = '';
     }
+  }
+
+  async function handleFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
+    const selectedFiles = Array.from(fileList);
+    event.target.value = '';
+    await loadFilesList(selectedFiles);
   }
 
   async function handlePageWallDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -535,85 +677,7 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     if (droppedFiles.length === 0) {
       return;
     }
-
-    setIsProcessing(true);
-    setIsLoadingFiles(true);
-    setLoadingProgress(null);
-    setError('');
-    setStatus(ui.statusReading);
-
-    try {
-      const nextSources: OrganizeSource[] = [];
-      const nextPages: OrganizePage[] = [];
-      let lastProgressUpdate = 0;
-
-      for (let fileIndex = 0; fileIndex < droppedFiles.length; fileIndex += 1) {
-        const file = droppedFiles[fileIndex];
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const previewDoc = await getDocument({ data: new Uint8Array(bytes) }).promise;
-        const sourceId = createId('source');
-        const pageCount = previewDoc.numPages;
-        nextSources.push({ id: sourceId, name: file.name, bytes, pageCount });
-
-        for (let index = 0; index < pageCount; index += 1) {
-          const now = performance.now();
-          if (now - lastProgressUpdate > 90 || index === pageCount - 1) {
-            setLoadingProgress({
-              fileIndex: fileIndex + 1,
-              totalFiles: droppedFiles.length,
-              pageIndex: index + 1,
-              totalPages: pageCount,
-            });
-            lastProgressUpdate = now;
-          }
-
-          const page = await previewDoc.getPage(index + 1);
-          const viewport = page.getViewport({ scale: 1 });
-          const targetWidth = 180;
-          const scale = Math.min(1.35, targetWidth / viewport.width);
-          const scaled = page.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.floor(scaled.width);
-          canvas.height = Math.floor(scaled.height);
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            previewDoc.destroy();
-            throw new Error(lang === 'zh' ? '无法创建缩略图画布' : 'Unable to create thumbnail canvas');
-          }
-
-          await page
-            .render({
-              canvasContext: ctx,
-              viewport: scaled,
-            } as Parameters<typeof page.render>[0])
-            .promise;
-
-          const previewDataUrl = canvas.toDataURL('image/jpeg', 0.86);
-          nextPages.push({
-            id: createId('page'),
-            sourceId,
-            sourceName: file.name,
-            sourcePageIndex: index,
-            previewDataUrl,
-            rotation: 0,
-          });
-        }
-
-        previewDoc.destroy();
-      }
-
-      setSources((current) => [...current, ...nextSources]);
-      setPages((current) => [...current, ...nextPages]);
-      setStatus(ui.statusReadDone(nextSources.length, nextPages.length));
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : String(loadError);
-      setError(ui.readFail(message));
-      setStatus(ui.statusReadFail);
-    } finally {
-      setIsLoadingFiles(false);
-      setLoadingProgress(null);
-      setIsProcessing(false);
-    }
+    await loadFilesList(droppedFiles);
   }
 
   function handleCardClick(pageId: string) {
@@ -829,14 +893,21 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     };
   }
 
-  async function buildOrganizePdf(): Promise<Uint8Array> {
+  async function buildOrganizePdf(options?: { forPrint?: boolean }): Promise<Uint8Array> {
     const sourceById = new Map(sources.map((source) => [source.id, source] as const));
     const sourceDocs = new Map<string, PDFDocument>();
     const encryptedSourceIds = new Set<string>();
     for (const source of sources) {
-      const doc = await PDFDocument.load(new Uint8Array(source.bytes), { ignoreEncryption: true });
-      sourceDocs.set(source.id, doc);
-      if (doc.isEncrypted) {
+      if (source.isEncrypted) {
+        encryptedSourceIds.add(source.id);
+      }
+      try {
+        const doc = await PDFDocument.load(new Uint8Array(source.bytes), { ignoreEncryption: true });
+        sourceDocs.set(source.id, doc);
+        if (doc.isEncrypted) {
+          encryptedSourceIds.add(source.id);
+        }
+      } catch {
         encryptedSourceIds.add(source.id);
       }
     }
@@ -853,7 +924,10 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
       if (encryptedSourceIds.has(page.sourceId)) {
         let pdfjsDoc = pdfjsDocs.get(source.id);
         if (!pdfjsDoc) {
-          pdfjsDoc = await getDocument({ data: new Uint8Array(source.bytes) }).promise;
+          pdfjsDoc = await getDocument({
+            data: new Uint8Array(source.bytes),
+            ...(source.password ? { password: source.password } : {}),
+          }).promise;
           pdfjsDocs.set(source.id, pdfjsDoc);
         }
         const { image, width, height } = await rasterizePageToImage(pdfjsDoc, page.sourcePageIndex, outputDoc);
@@ -880,7 +954,11 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
       }
     }
 
-    return outputDoc.save();
+    const shouldEncrypt = !options?.forPrint && encryptedSourceInfo.isEncrypted && keepEncryption;
+    return savePdfWithOptionalEncryption(
+      outputDoc,
+      shouldEncrypt ? { encryptPassword: encryptedSourceInfo.password } : undefined,
+    );
   }
 
   function finalizeOutputBlob(outputBytes: Uint8Array): Blob {
@@ -928,7 +1006,7 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
     setStatus(ui.statusExporting);
 
     try {
-      const outputBytes = await buildOrganizePdf();
+      const outputBytes = await buildOrganizePdf({ forPrint: true });
       const url = URL.createObjectURL(finalizeOutputBlob(outputBytes));
       const printWindow = window.open(url, '_blank');
       if (printWindow) {
@@ -1002,6 +1080,17 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
               <strong>{totalPages}</strong>
             </div>
           </div>
+
+          {pages.length > 0 && encryptedSourceInfo.isEncrypted ? (
+            <label className="encryption-checkbox-row">
+              <input
+                type="checkbox"
+                checked={keepEncryption}
+                onChange={(event) => setKeepEncryption(event.target.checked)}
+              />
+              <span>{ui.keepEncryptionLabel}</span>
+            </label>
+          ) : null}
 
           <div className="action-row">
             <button className="primary-button" type="button" onClick={handleExport} disabled={isProcessing || pages.length === 0}>
@@ -1201,6 +1290,36 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
           </div>
         </section>
       </main>
+
+      {passwordModal ? (
+        <div className="password-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="organize-password-title">
+          <form className="password-modal" onSubmit={handlePasswordModalSubmit}>
+            <h3 id="organize-password-title">{ui.passwordTitle}</h3>
+            <p>{ui.passwordDesc(passwordModal.fileName)}</p>
+            <input
+              type="password"
+              value={passwordInput}
+              placeholder={ui.passwordPlaceholder}
+              onChange={(event) => {
+                setPasswordInput(event.target.value);
+                if (passwordModal.error) {
+                  setPasswordModal((current) => (current ? { ...current, error: '' } : null));
+                }
+              }}
+              autoFocus
+            />
+            {passwordModal.error ? <p className="error-text">{passwordModal.error}</p> : null}
+            <div className="password-modal-actions">
+              <button type="button" className="secondary-button" onClick={handlePasswordModalCancel}>
+                {ui.passwordCancel}
+              </button>
+              <button type="submit" className="primary-button">
+                {ui.passwordUnlock}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
