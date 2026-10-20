@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PDFDocument, PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Theme } from './App';
@@ -30,6 +30,10 @@ type PageRangeResult = {
 };
 
 type DownloadMode = 'all' | 'selected';
+
+type MarginPresetId = 'uniform' | 'right-note' | 'bottom-note' | 'gutter';
+
+type MarginPattern = 'none' | 'ruled' | 'dots' | 'grid';
 
 export type Lang = 'zh' | 'en';
 
@@ -125,6 +129,17 @@ const COPY = {
     passwordIncorrect: '密码错误，请重新输入。',
     statusPasswordRequired: '等待输入 PDF 密码...',
     keepEncryptionLabel: '保留 PDF 加密（取消勾选则移除加密）',
+    quickPresets: '快捷留白',
+    presetUniform: '四周均等',
+    presetRightNote: '右侧笔记',
+    presetBottomNote: '底部笔记',
+    presetGutter: '双面装订',
+    gutterMirrorHint: '双面装订已启用：偶数页左右边距将自动镜像对调',
+    marginPattern: '留白样式',
+    patternNone: '空白',
+    patternRuled: '横线',
+    patternDots: '点阵',
+    patternGrid: '方格',
   },
   en: {
     heroTitle: 'Add margins to PDFs and preview the result in real time',
@@ -194,6 +209,17 @@ const COPY = {
     passwordIncorrect: 'Incorrect password, please try again.',
     statusPasswordRequired: 'Waiting for PDF password...',
     keepEncryptionLabel: 'Keep PDF encryption (uncheck to remove encryption)',
+    quickPresets: 'Quick preset',
+    presetUniform: 'Uniform',
+    presetRightNote: 'Right note',
+    presetBottomNote: 'Bottom note',
+    presetGutter: 'Book gutter',
+    gutterMirrorHint: 'Book gutter active: left & right margins mirror on even pages',
+    marginPattern: 'Margin style',
+    patternNone: 'Blank',
+    patternRuled: 'Ruled',
+    patternDots: 'Dots',
+    patternGrid: 'Grid',
   },
 } as const;
 
@@ -233,6 +259,220 @@ function getPageSizeMm(
   }
   const selected = PRESETS[preset];
   return { widthMm: selected.widthMm, heightMm: selected.heightMm };
+}
+
+function getEffectiveMargins(base: MarginState, mirrorGutter: boolean, pageNumber: number): MarginState {
+  if (mirrorGutter && pageNumber % 2 === 0) {
+    return {
+      top: base.top,
+      right: base.left,
+      bottom: base.bottom,
+      left: base.right,
+    };
+  }
+  return base;
+}
+
+type PatternGeometry = {
+  hLines: Array<{ x1: number; x2: number; y: number }>;
+  vLines: Array<{ x: number; y1: number; y2: number }>;
+  dots: Array<{ x: number; y: number }>;
+};
+
+function computeMarginPatternGeometry(
+  widthPt: number,
+  heightPt: number,
+  effectiveMargins: MarginState,
+  pattern: MarginPattern,
+): PatternGeometry {
+  if (pattern === 'none' || widthPt <= 0 || heightPt <= 0) {
+    return { hLines: [], vLines: [], dots: [] };
+  }
+
+  const edgePadPt = mmToPt(6);
+  const contentGapPt = mmToPt(3.5);
+  const minSegPt = mmToPt(6);
+
+  const cLeft = clamp(mmToPt(effectiveMargins.left), 0, widthPt);
+  const cRight = clamp(widthPt - mmToPt(effectiveMargins.right), cLeft, widthPt);
+  const cTop = clamp(mmToPt(effectiveMargins.top), 0, heightPt);
+  const cBottom = clamp(heightPt - mmToPt(effectiveMargins.bottom), cTop, heightPt);
+
+  const hasWideSide =
+    effectiveMargins.top >= 14
+    || effectiveMargins.right >= 14
+    || effectiveMargins.bottom >= 14
+    || effectiveMargins.left >= 14;
+  const thresholdMm = hasWideSide ? 14 : 5;
+
+  const activeTop = effectiveMargins.top >= thresholdMm;
+  const activeRight = effectiveMargins.right >= thresholdMm;
+  const activeBottom = effectiveMargins.bottom >= thresholdMm;
+  const activeLeft = effectiveMargins.left >= thresholdMm;
+
+  if (!activeTop && !activeRight && !activeBottom && !activeLeft) {
+    return { hLines: [], vLines: [], dots: [] };
+  }
+
+  const rLeft = activeLeft ? edgePadPt : clamp(cLeft, edgePadPt, widthPt - edgePadPt);
+  const rRight = activeRight ? widthPt - edgePadPt : clamp(cRight, rLeft, widthPt - edgePadPt);
+  const rTop = activeTop ? edgePadPt : clamp(cTop, edgePadPt, heightPt - edgePadPt);
+  const rBottom = activeBottom ? heightPt - edgePadPt : clamp(cBottom, rTop, heightPt - edgePadPt);
+
+  if (rRight - rLeft < minSegPt || rBottom - rTop < minSegPt) {
+    return { hLines: [], vLines: [], dots: [] };
+  }
+
+  const exLeft = activeLeft ? Math.max(rLeft, cLeft - contentGapPt) : rLeft;
+  const exRight = activeRight ? Math.min(rRight, cRight + contentGapPt) : rRight;
+  const exTop = activeTop ? Math.max(rTop, cTop - contentGapPt) : rTop;
+  const exBottom = activeBottom ? Math.min(rBottom, cBottom + contentGapPt) : rBottom;
+
+  const stepPt = mmToPt(pattern === 'ruled' ? 7 : 5);
+  const hLines: PatternGeometry['hLines'] = [];
+  const vLines: PatternGeometry['vLines'] = [];
+  const dots: PatternGeometry['dots'] = [];
+
+  if (pattern === 'ruled' || pattern === 'grid') {
+    const startY = pattern === 'ruled' ? rTop + stepPt : rTop;
+    for (let y = startY; y <= rBottom + 0.01; y += stepPt) {
+      if (exLeft >= exRight || y <= exTop || y >= exBottom) {
+        if (rRight - rLeft >= minSegPt) {
+          hLines.push({ x1: rLeft, x2: rRight, y });
+        }
+      } else {
+        if (exLeft - rLeft >= minSegPt) {
+          hLines.push({ x1: rLeft, x2: exLeft, y });
+        }
+        if (rRight - exRight >= minSegPt) {
+          hLines.push({ x1: exRight, x2: rRight, y });
+        }
+      }
+    }
+  }
+
+  if (pattern === 'grid') {
+    for (let x = rLeft; x <= rRight + 0.01; x += stepPt) {
+      if (exTop >= exBottom || x <= exLeft || x >= exRight) {
+        if (rBottom - rTop >= minSegPt) {
+          vLines.push({ x, y1: rTop, y2: rBottom });
+        }
+      } else {
+        if (exTop - rTop >= minSegPt) {
+          vLines.push({ x, y1: rTop, y2: exTop });
+        }
+        if (rBottom - exBottom >= minSegPt) {
+          vLines.push({ x, y1: exBottom, y2: rBottom });
+        }
+      }
+    }
+  }
+
+  if (pattern === 'dots') {
+    for (let y = rTop; y <= rBottom + 0.01; y += stepPt) {
+      for (let x = rLeft; x <= rRight + 0.01; x += stepPt) {
+        if (exLeft < exRight && exTop < exBottom && x > exLeft && x < exRight && y > exTop && y < exBottom) {
+          continue;
+        }
+        dots.push({ x, y });
+      }
+    }
+  }
+
+  return { hLines, vLines, dots };
+}
+
+function drawMarginPatternCanvas(
+  ctx: CanvasRenderingContext2D,
+  offsetX: number,
+  offsetY: number,
+  pageScale: number,
+  widthPt: number,
+  heightPt: number,
+  effectiveMargins: MarginState,
+  pattern: MarginPattern,
+) {
+  const geom = computeMarginPatternGeometry(widthPt, heightPt, effectiveMargins, pattern);
+  if (geom.hLines.length === 0 && geom.vLines.length === 0 && geom.dots.length === 0) {
+    return;
+  }
+
+  ctx.save();
+  if (geom.hLines.length > 0 || geom.vLines.length > 0) {
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.52)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const seg of geom.hLines) {
+      const y = offsetY + seg.y * pageScale;
+      ctx.moveTo(offsetX + seg.x1 * pageScale, y);
+      ctx.lineTo(offsetX + seg.x2 * pageScale, y);
+    }
+    for (const seg of geom.vLines) {
+      const x = offsetX + seg.x * pageScale;
+      ctx.moveTo(x, offsetY + seg.y1 * pageScale);
+      ctx.lineTo(x, offsetY + seg.y2 * pageScale);
+    }
+    ctx.stroke();
+  }
+
+  if (geom.dots.length > 0) {
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.78)';
+    const radius = Math.max(1.05, 0.85 * pageScale);
+    ctx.beginPath();
+    for (const dot of geom.dots) {
+      const cx = offsetX + dot.x * pageScale;
+      const cy = offsetY + dot.y * pageScale;
+      ctx.moveTo(cx + radius, cy);
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawMarginPatternPdf(
+  page: PDFPage,
+  widthPt: number,
+  heightPt: number,
+  effectiveMargins: MarginState,
+  pattern: MarginPattern,
+) {
+  const geom = computeMarginPatternGeometry(widthPt, heightPt, effectiveMargins, pattern);
+  if (geom.hLines.length === 0 && geom.vLines.length === 0 && geom.dots.length === 0) {
+    return;
+  }
+
+  page.resetPosition();
+  const lineColor = rgb(0.78, 0.82, 0.87);
+  const dotColor = rgb(0.66, 0.72, 0.79);
+
+  for (const seg of geom.hLines) {
+    const pdfY = heightPt - seg.y;
+    page.drawLine({
+      start: { x: seg.x1, y: pdfY },
+      end: { x: seg.x2, y: pdfY },
+      thickness: 0.45,
+      color: lineColor,
+    });
+  }
+
+  for (const seg of geom.vLines) {
+    page.drawLine({
+      start: { x: seg.x, y: heightPt - seg.y1 },
+      end: { x: seg.x, y: heightPt - seg.y2 },
+      thickness: 0.45,
+      color: lineColor,
+    });
+  }
+
+  for (const dot of geom.dots) {
+    page.drawCircle({
+      x: dot.x,
+      y: heightPt - dot.y,
+      size: 0.72,
+      color: dotColor,
+    });
+  }
 }
 
 async function loadPagePreview(bytes: Uint8Array, pageNumber: number, password?: string) {
@@ -342,6 +582,8 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     bottom: 20,
     left: 20,
   });
+  const [isMirrorGutter, setIsMirrorGutter] = useState(false);
+  const [marginPattern, setMarginPattern] = useState<MarginPattern>('none');
   const [isRendering, setIsRendering] = useState(false);
   const [status, setStatus] = useState('等待上传 PDF');
   const [previewError, setPreviewError] = useState('');
@@ -399,16 +641,6 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     [pageSizeMm],
   );
 
-  const marginBoxPt = useMemo(
-    () => ({
-      top: mmToPt(margins.top),
-      right: mmToPt(margins.right),
-      bottom: mmToPt(margins.bottom),
-      left: mmToPt(margins.left),
-    }),
-    [margins],
-  );
-
   const pageRangeResult = useMemo(() => parsePageRange(pageRangeInput, pageCount), [pageRangeInput, pageCount]);
   const selectedPageIndices = pageRangeResult.indices;
   const activePreviewIndex =
@@ -416,6 +648,37 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
       ? 0
       : Math.min(previewPageIndex, selectedPageIndices.length - 1);
   const previewPageNumber = selectedPageIndices.length > 0 ? selectedPageIndices[activePreviewIndex] + 1 : 1;
+
+  const previewMargins = useMemo(
+    () => getEffectiveMargins(margins, isMirrorGutter, previewPageNumber),
+    [margins, isMirrorGutter, previewPageNumber],
+  );
+
+  const previewMarginBoxPt = useMemo(
+    () => ({
+      top: mmToPt(previewMargins.top),
+      right: mmToPt(previewMargins.right),
+      bottom: mmToPt(previewMargins.bottom),
+      left: mmToPt(previewMargins.left),
+    }),
+    [previewMargins],
+  );
+
+  const activeMarginPreset = useMemo<MarginPresetId | null>(() => {
+    if (isMirrorGutter) {
+      return 'gutter';
+    }
+    if (margins.top === 20 && margins.right === 20 && margins.bottom === 20 && margins.left === 20) {
+      return 'uniform';
+    }
+    if (margins.top === 12 && margins.right === 65 && margins.bottom === 12 && margins.left === 12) {
+      return 'right-note';
+    }
+    if (margins.top === 12 && margins.right === 12 && margins.bottom === 75 && margins.left === 12) {
+      return 'bottom-note';
+    }
+    return null;
+  }, [isMirrorGutter, margins]);
   const pageRangeError =
     pageRangeResult.invalidTokens.length > 0
       ? ui.invalidPageRange(pageRangeResult.invalidTokens.join(', '))
@@ -692,7 +955,8 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     bufferCtx.fillStyle = isDarkTheme ? '#0f172a' : '#e2e8f0';
     bufferCtx.fillRect(0, 0, containerWidth, cssHeight);
 
-    const hasNegativeMargin = margins.top < 0 || margins.right < 0 || margins.bottom < 0 || margins.left < 0;
+    const hasNegativeMargin =
+      previewMargins.top < 0 || previewMargins.right < 0 || previewMargins.bottom < 0 || previewMargins.left < 0;
     const captionSpace = 34;
     const pageMaxWidth = Math.max(260, containerWidth - 64);
     const pageMaxHeight = Math.max(220, containerHeight - 44 - captionSpace);
@@ -711,10 +975,21 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
     bufferCtx.shadowColor = 'transparent';
 
-    const marginLeft = pageCssWidth * (marginBoxPt.left / pageSizePt.width);
-    const marginRight = pageCssWidth * (marginBoxPt.right / pageSizePt.width);
-    const marginTop = pageCssHeight * (marginBoxPt.top / pageSizePt.height);
-    const marginBottom = pageCssHeight * (marginBoxPt.bottom / pageSizePt.height);
+    drawMarginPatternCanvas(
+      bufferCtx,
+      offsetX,
+      offsetY,
+      pageScale,
+      pageSizePt.width,
+      pageSizePt.height,
+      previewMargins,
+      marginPattern,
+    );
+
+    const marginLeft = pageCssWidth * (previewMarginBoxPt.left / pageSizePt.width);
+    const marginRight = pageCssWidth * (previewMarginBoxPt.right / pageSizePt.width);
+    const marginTop = pageCssHeight * (previewMarginBoxPt.top / pageSizePt.height);
+    const marginBottom = pageCssHeight * (previewMarginBoxPt.bottom / pageSizePt.height);
     const contentX = offsetX + marginLeft;
     const contentY = offsetY + marginTop;
     const contentWidth = pageCssWidth - marginLeft - marginRight;
@@ -774,15 +1049,13 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   }, [
     fileBytes,
     lang,
-    marginBoxPt,
-    margins.bottom,
-    margins.left,
-    margins.right,
-    margins.top,
+    marginPattern,
     pageSizeMm.heightMm,
     pageSizeMm.widthMm,
     pageSizePt.height,
     pageSizePt.width,
+    previewMarginBoxPt,
+    previewMargins,
     previewPageNumber,
     previewSourceVersion,
     theme,
@@ -831,20 +1104,33 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     const outputDoc = await PDFDocument.create();
     const outputWidth = pageSizePt.width;
     const outputHeight = pageSizePt.height;
-    const contentWidth = outputWidth - marginBoxPt.left - marginBoxPt.right;
-    const contentHeight = outputHeight - marginBoxPt.top - marginBoxPt.bottom;
 
-    const transformPageWithMargin = (page: PDFPage) => {
+    const getPageMarginGeometry = (pageIndex: number) => {
+      const effMargins = getEffectiveMargins(margins, isMirrorGutter, pageIndex + 1);
+      const effMarginBoxPt = {
+        top: mmToPt(effMargins.top),
+        right: mmToPt(effMargins.right),
+        bottom: mmToPt(effMargins.bottom),
+        left: mmToPt(effMargins.left),
+      };
+      const contentWidth = outputWidth - effMarginBoxPt.left - effMarginBoxPt.right;
+      const contentHeight = outputHeight - effMarginBoxPt.top - effMarginBoxPt.bottom;
+      return { effMargins, effMarginBoxPt, contentWidth, contentHeight };
+    };
+
+    const transformPageWithMargin = (page: PDFPage, pageIndex: number) => {
+      const { effMargins, effMarginBoxPt, contentWidth, contentHeight } = getPageMarginGeometry(pageIndex);
       const sourceSize = page.getSize();
       const scale = Math.min(contentWidth / sourceSize.width, contentHeight / sourceSize.height);
       const drawWidth = sourceSize.width * scale;
       const drawHeight = sourceSize.height * scale;
-      const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
-      const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
+      const x = effMarginBoxPt.left + (contentWidth - drawWidth) / 2;
+      const y = effMarginBoxPt.bottom + (contentHeight - drawHeight) / 2;
       page.setSize(outputWidth, outputHeight);
       page.scaleContent(scale, scale);
       page.scaleAnnotations(scale, scale);
       page.translateContent(x, y);
+      drawMarginPatternPdf(page, outputWidth, outputHeight, effMargins, marginPattern);
     };
 
     if (encrypted || !sourceDoc) {
@@ -864,12 +1150,15 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
         image: Awaited<ReturnType<typeof outputDoc.embedPng>>,
         srcWidth: number,
         srcHeight: number,
+        pageIndex: number,
       ) => {
+        const { effMargins, effMarginBoxPt, contentWidth, contentHeight } = getPageMarginGeometry(pageIndex);
+        drawMarginPatternPdf(page, outputWidth, outputHeight, effMargins, marginPattern);
         const scale = Math.min(contentWidth / srcWidth, contentHeight / srcHeight);
         const drawWidth = srcWidth * scale;
         const drawHeight = srcHeight * scale;
-        const x = marginBoxPt.left + (contentWidth - drawWidth) / 2;
-        const y = marginBoxPt.bottom + (contentHeight - drawHeight) / 2;
+        const x = effMarginBoxPt.left + (contentWidth - drawWidth) / 2;
+        const y = effMarginBoxPt.bottom + (contentHeight - drawHeight) / 2;
         page.drawImage(image, { x, y, width: drawWidth, height: drawHeight });
       };
 
@@ -878,7 +1167,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
           for (const index of safePageIndices) {
             const { image, width, height } = await rasterizeSourcePage(pdfjsDoc, index, outputDoc);
             const page = outputDoc.addPage([outputWidth, outputHeight]);
-            drawImageWithMargin(page, image, width, height);
+            drawImageWithMargin(page, image, width, height, index);
           }
         } else {
           const selectedSet = new Set(safePageIndices);
@@ -886,7 +1175,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
             const { image, width, height } = await rasterizeSourcePage(pdfjsDoc, index, outputDoc);
             if (selectedSet.has(index)) {
               const page = outputDoc.addPage([outputWidth, outputHeight]);
-              drawImageWithMargin(page, image, width, height);
+              drawImageWithMargin(page, image, width, height, index);
             } else {
               const page = outputDoc.addPage([width, height]);
               page.drawImage(image, { x: 0, y: 0, width, height });
@@ -908,9 +1197,9 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
       }
       if (downloadMode === 'selected') {
         const copiedPages = await outputDoc.copyPages(sourceDoc, safePageIndices);
-        copiedPages.forEach((page) => {
+        copiedPages.forEach((page, i) => {
           outputDoc.addPage(page);
-          transformPageWithMargin(page);
+          transformPageWithMargin(page, safePageIndices[i] ?? i);
         });
       } else {
         const allPageIndices = Array.from({ length: sourcePageCount }, (_, index) => index);
@@ -919,7 +1208,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
         copiedPages.forEach((page, pageIndex) => {
           outputDoc.addPage(page);
           if (selectedSet.has(pageIndex)) {
-            transformPageWithMargin(page);
+            transformPageWithMargin(page, pageIndex);
           }
         });
       }
@@ -1007,7 +1296,29 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   }
 
   function applyUniformMargin(value: number) {
+    setIsMirrorGutter(false);
     setMargins({ top: value, right: value, bottom: value, left: value });
+  }
+
+  function applyMarginPreset(presetId: MarginPresetId) {
+    switch (presetId) {
+      case 'uniform':
+        setIsMirrorGutter(false);
+        setMargins({ top: 20, right: 20, bottom: 20, left: 20 });
+        break;
+      case 'right-note':
+        setIsMirrorGutter(false);
+        setMargins({ top: 12, right: 65, bottom: 12, left: 12 });
+        break;
+      case 'bottom-note':
+        setIsMirrorGutter(false);
+        setMargins({ top: 12, right: 12, bottom: 75, left: 12 });
+        break;
+      case 'gutter':
+        setIsMirrorGutter(true);
+        setMargins({ top: 15, right: 12, bottom: 15, left: 32 });
+        break;
+    }
   }
 
   function handlePreviewPointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -1054,12 +1365,14 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     const deltaY = event.clientY - dragState.startClientY;
     const deltaMmX = (deltaX / layout.pageCssWidth) * layout.pageSizeMmWidth;
     const deltaMmY = (deltaY / layout.pageCssHeight) * layout.pageSizeMmHeight;
+    const isMirroredPage = isMirrorGutter && previewPageNumber % 2 === 0;
+    const horizontalDelta = isMirroredPage ? -deltaMmX : deltaMmX;
 
     setMargins({
       top: roundTo4(clamp(dragState.startMargins.top + deltaMmY, -200, 200)),
-      right: roundTo4(clamp(dragState.startMargins.right - deltaMmX, -200, 200)),
+      right: roundTo4(clamp(dragState.startMargins.right - horizontalDelta, -200, 200)),
       bottom: roundTo4(clamp(dragState.startMargins.bottom - deltaMmY, -200, 200)),
-      left: roundTo4(clamp(dragState.startMargins.left + deltaMmX, -200, 200)),
+      left: roundTo4(clamp(dragState.startMargins.left + horizontalDelta, -200, 200)),
     });
   }
 
@@ -1130,6 +1443,75 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
             </label>
 
             <div className="margin-priority">
+              <div className="single-line-control margin-preset-row">
+                <span>{ui.quickPresets}</span>
+                <div className="range-chip-row margin-preset-chips" role="group" aria-label={ui.quickPresets}>
+                  <button
+                    type="button"
+                    className={`range-chip ${activeMarginPreset === 'uniform' ? 'active' : ''}`}
+                    onClick={() => applyMarginPreset('uniform')}
+                  >
+                    {ui.presetUniform}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${activeMarginPreset === 'right-note' ? 'active' : ''}`}
+                    onClick={() => applyMarginPreset('right-note')}
+                  >
+                    {ui.presetRightNote}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${activeMarginPreset === 'bottom-note' ? 'active' : ''}`}
+                    onClick={() => applyMarginPreset('bottom-note')}
+                  >
+                    {ui.presetBottomNote}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${activeMarginPreset === 'gutter' ? 'active' : ''}`}
+                    onClick={() => applyMarginPreset('gutter')}
+                  >
+                    {ui.presetGutter}
+                  </button>
+                </div>
+              </div>
+              {isMirrorGutter ? <p className="range-hint muted-text margin-gutter-hint">{ui.gutterMirrorHint}</p> : null}
+
+              <div className="single-line-control margin-preset-row">
+                <span>{ui.marginPattern}</span>
+                <div className="range-chip-row margin-pattern-chips" role="group" aria-label={ui.marginPattern}>
+                  <button
+                    type="button"
+                    className={`range-chip ${marginPattern === 'none' ? 'active' : ''}`}
+                    onClick={() => setMarginPattern('none')}
+                  >
+                    {ui.patternNone}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${marginPattern === 'ruled' ? 'active' : ''}`}
+                    onClick={() => setMarginPattern('ruled')}
+                  >
+                    {ui.patternRuled}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${marginPattern === 'dots' ? 'active' : ''}`}
+                    onClick={() => setMarginPattern('dots')}
+                  >
+                    {ui.patternDots}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${marginPattern === 'grid' ? 'active' : ''}`}
+                    onClick={() => setMarginPattern('grid')}
+                  >
+                    {ui.patternGrid}
+                  </button>
+                </div>
+              </div>
+
               <label className="single-line-control">
                 <span>{ui.uniformMargin}</span>
                 <div className="inline-control">

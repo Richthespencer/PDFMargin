@@ -514,6 +514,41 @@ button {
   margin: 0;
 }
 
+.margin-preset-row {
+  align-items: start;
+}
+
+.margin-preset-row > span {
+  padding-top: 6px;
+}
+
+.range-chip-row.margin-preset-chips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.range-chip-row.margin-pattern-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.range-chip-row.margin-preset-chips .range-chip,
+.range-chip-row.margin-pattern-chips .range-chip {
+  text-align: center;
+  justify-content: center;
+  padding: 7px 8px;
+  font-size: 0.83rem;
+  white-space: nowrap;
+}
+
+.margin-gutter-hint {
+  margin: -4px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .aligned-with-margin {
   padding-left: 12px;
 }
