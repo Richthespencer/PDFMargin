@@ -6,10 +6,11 @@ Chrome 应用商店页面：https://chromewebstore.google.com/detail/pdfmargin/p
 
 在线体验：https://richthespencer.github.io/PDFMargin/
 
-PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
+PDFMargin 是一个本地优先的 PDF 应用，专注三个核心场景：
 
 - `Margin`：解决“打印边缘被裁切”问题，调整边距后下载或打印
 - `Organize`：多 PDF 页面级整理，重排、旋转、删除后下载或打印
+- `Compress`：压缩 PDF 体积，兼顾清晰度与文本可搜索性
 
 所有处理都在本地浏览器/客户端完成，不上传文件到服务端。
 
@@ -41,6 +42,20 @@ PDFMargin 是一个本地优先的 PDF 应用，专注两个核心场景：
 - 删除二次确认与一键清空全部页面
 - 撤销上一步（支持撤销重排/删除）
 - 支持下载 PDF 与直接打印当前结果
+
+### Compress（体积压缩）
+
+- 提供轻度、标准、强力三档压缩程度，辅以阶梯式视觉强度条直观指示
+- 重压缩与降采样内嵌图片，完整保留文字与矢量内容的可选与搜索能力
+- 合并重复字体与图像资源流，压缩未压缩流并清理冗余孤立对象
+- 智能文件处理策略：
+  - 小文件（< 20 MB）上传或切换压缩档位后自动即时压缩
+  - 大文件（≥ 20 MB）提供手动“开始压缩”按钮，防止误触导致卡顿
+- 实时动态进度条与百分比显示
+- 压缩前后画质实时对比预览
+- 添加新 PDF 后自动切换至最新上传文件的预览视图
+- 支持加密 PDF 密码解锁与压缩后保留密码加密
+- 支持单文件与批量下载压缩结果，亦可直接调用系统打印
 
 ### 体验与平台
 
@@ -92,6 +107,8 @@ npm run pack:extension
 - `src/App.tsx`：全局模式/语言/主题切换
 - `src/MarginTool.tsx`：边距调整流程
 - `src/OrganizeTool.tsx`：页面整理流程
+- `src/CompressTool.tsx`：文件压缩流程
+- `src/pdfCompression.ts`：本地 PDF 压缩引擎
 - `src/styles.css`：主题与全局样式
 - `src-tauri/`：桌面端壳层
 - `extension/`：Chrome Extension 清单与后台脚本

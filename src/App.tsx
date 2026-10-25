@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import MarginTool, { type Lang } from './MarginTool';
 import OrganizeTool from './OrganizeTool';
+import CompressTool from './CompressTool';
 
-type Mode = 'margin' | 'organize';
+type Mode = 'margin' | 'organize' | 'compress';
 export type Theme = 'light' | 'dark';
 
 function detectBrowserLang(): Lang {
@@ -13,7 +14,7 @@ function detectBrowserLang(): Lang {
 function loadPersistedMode(): Mode {
   try {
     const saved = localStorage.getItem('pdfmargin-mode');
-    if (saved === 'margin' || saved === 'organize') {
+    if (saved === 'margin' || saved === 'organize' || saved === 'compress') {
       return saved;
     }
   } catch {}
@@ -98,6 +99,13 @@ export default function App() {
         </button>
         <button
           type="button"
+          className={`mode-switch-button ${mode === 'compress' ? 'active' : ''}`}
+          onClick={() => handleModeSwitch('compress')}
+        >
+          Compress
+        </button>
+        <button
+          type="button"
           className="theme-toggle"
           onClick={handleToggleTheme}
           aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
@@ -127,9 +135,13 @@ export default function App() {
           )}
         </button>
       </nav>
-      {mode === 'margin'
-        ? <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} onPdfLoadedChange={setHasPdfLoaded} />
-        : <OrganizeTool lang={lang} onToggleLang={handleToggleLang} onPdfLoadedChange={setHasPdfLoaded} />}
+      {mode === 'margin' ? (
+        <MarginTool lang={lang} onToggleLang={handleToggleLang} theme={theme} onPdfLoadedChange={setHasPdfLoaded} />
+      ) : mode === 'organize' ? (
+        <OrganizeTool lang={lang} onToggleLang={handleToggleLang} onPdfLoadedChange={setHasPdfLoaded} />
+      ) : (
+        <CompressTool lang={lang} onToggleLang={handleToggleLang} onPdfLoadedChange={setHasPdfLoaded} />
+      )}
       <footer className="app-footer">
         <span>© 2026 PDFMargin. All rights reserved.</span>
         <a href="https://github.com/Richthespencer/PDFMargin" target="_blank" rel="noreferrer">

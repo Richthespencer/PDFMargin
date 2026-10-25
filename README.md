@@ -6,10 +6,11 @@ Chrome Web Store: https://chromewebstore.google.com/detail/pdfmargin/pcckkfncbpi
 
 Live site: https://richthespencer.github.io/PDFMargin/
 
-PDFMargin is a local-first PDF app built around two practical workflows:
+PDFMargin is a local-first PDF app built around three practical workflows:
 
 - `Margin`: fix print cutoff issues near page edges and output print-ready files
 - `Organize`: reorder, rotate, remove, and combine pages across multiple PDFs
+- `Compress`: reduce PDF file size while preserving clarity and searchable text
 
 All processing runs locally in your browser/desktop runtime.
 
@@ -41,6 +42,20 @@ All processing runs locally in your browser/desktop runtime.
 - Two-step delete confirmation
 - One-click clear all pages and undo last action
 - Download PDF or print current organized result
+
+### Compress
+
+- Three compression levels: `Light`, `Balanced`, and `Strong` with visual intensity indicators
+- Recompresses and downsamples embedded images while preserving the original text and vector layers
+- Merges duplicate font and image resources, compresses unfiltered streams, and strips orphan objects
+- Dual execution strategy:
+  - Small files (< 20 MB) compress automatically on upload or level switch
+  - Large files (≥ 20 MB) provide a manual Start Compression button to prevent browser slowdowns
+- Real-time animated progress bar with percentage readout
+- Live preview comparison between original and compressed renderings
+- Automatic preview focus on newly uploaded PDF files
+- Retains password protection for encrypted PDFs with optional decryption export
+- Download individual or batch compressed PDFs, or print directly
 
 ### UX and Platforms
 
@@ -92,6 +107,8 @@ npm run pack:extension
 - `src/App.tsx`: global mode/language/theme switch
 - `src/MarginTool.tsx`: margin workflow
 - `src/OrganizeTool.tsx`: organize workflow
+- `src/CompressTool.tsx`: compression workflow
+- `src/pdfCompression.ts`: client-side PDF compression engine
 - `src/styles.css`: global + theming styles
 - `src-tauri/`: desktop wrapper
 - `extension/`: Chrome extension manifest and background script

@@ -2,8 +2,8 @@
 
 ## Repo shape
 - Single-package Vite + React + TypeScript app (no monorepo/workspaces).
-- Main entrypoints: `src/main.tsx` (bootstraps app) and `src/App.tsx` (top-level mode switch: `Margin` / `Organize`).
-- Feature modules: `src/MarginTool.tsx` (margin workflow) and `src/OrganizeTool.tsx` (merge/reorder/delete workflow).
+- Main entrypoints: `src/main.tsx` (bootstraps app) and `src/App.tsx` (top-level mode switch: `Margin` / `Organize` / `Compress`).
+- Feature modules: `src/MarginTool.tsx` (margin workflow), `src/OrganizeTool.tsx` (merge/reorder/delete workflow), and `src/CompressTool.tsx` (PDF compression workflow).
 - No CI workflows, no lint script, and no test script are configured in this repo.
 
 ## Verified commands
