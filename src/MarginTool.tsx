@@ -557,12 +557,11 @@ function parsePageRange(input: string, totalPages: number): PageRangeResult {
 
 type MarginToolProps = {
   lang: Lang;
-  onToggleLang: () => void;
   theme: Theme;
   onPdfLoadedChange: (loaded: boolean) => void;
 };
 
-export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChange }: MarginToolProps) {
+export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToolProps) {
   const [fileName, setFileName] = useState('');
   const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -952,8 +951,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     bufferCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
     bufferCtx.clearRect(0, 0, containerWidth, cssHeight);
     const isDarkTheme = theme === 'dark';
-    bufferCtx.fillStyle = isDarkTheme ? '#0f172a' : '#e2e8f0';
-    bufferCtx.fillRect(0, 0, containerWidth, cssHeight);
+    // Background is left transparent so the themed preview stage (CSS) shows through.
 
     const hasNegativeMargin =
       previewMargins.top < 0 || previewMargins.right < 0 || previewMargins.bottom < 0 || previewMargins.left < 0;
@@ -968,7 +966,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
 
     bufferCtx.fillStyle = '#ffffff';
     bufferCtx.fillRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
-    bufferCtx.shadowColor = isDarkTheme ? 'rgba(15, 23, 42, 0.28)' : 'rgba(15, 23, 42, 0.12)';
+    bufferCtx.shadowColor = isDarkTheme ? 'rgba(0, 0, 0, 0.45)' : 'rgba(40, 36, 28, 0.14)';
     bufferCtx.shadowBlur = 30;
     bufferCtx.shadowOffsetY = 10;
     bufferCtx.fillStyle = '#ffffff';
@@ -1005,7 +1003,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
       pageSizeMmHeight: pageSizeMm.heightMm,
     };
 
-    bufferCtx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
+    bufferCtx.strokeStyle = 'rgba(52, 81, 209, 0.5)';
     bufferCtx.setLineDash([10, 8]);
     bufferCtx.strokeRect(contentX, contentY, contentWidth, contentHeight);
     bufferCtx.setLineDash([]);
@@ -1017,11 +1015,11 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
     const drawY = contentY + (contentHeight - drawHeight) / 2;
 
     bufferCtx.drawImage(sourceCanvas, drawX, drawY, drawWidth, drawHeight);
-    bufferCtx.strokeStyle = isDarkTheme ? 'rgba(148, 163, 184, 0.8)' : 'rgba(100, 116, 139, 0.65)';
+    bufferCtx.strokeStyle = isDarkTheme ? 'rgba(236, 235, 231, 0.28)' : 'rgba(29, 28, 25, 0.18)';
     bufferCtx.lineWidth = 1;
     bufferCtx.strokeRect(offsetX, offsetY, pageCssWidth, pageCssHeight);
     if (!hasNegativeMargin) {
-      bufferCtx.fillStyle = isDarkTheme ? '#64748b' : '#475569';
+      bufferCtx.fillStyle = isDarkTheme ? '#8b877d' : '#5f5c55';
       bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       bufferCtx.fillText(
         lang === 'zh'
@@ -1403,16 +1401,17 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
   return (
     <div>
       <header className="hero">
-        <div>
+        <div className="hero-text">
           <p className="eyebrow">PDF Margin Tool</p>
           <h1>{ui.heroTitle}</h1>
+          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
-        <div className="hero-card">
-          <span>{status}</span>
-          <strong>{pageCount > 0 ? ui.pagesLoaded(pageCount) : ui.pagesNotLoaded}</strong>
-          <button type="button" className="lang-toggle" onClick={onToggleLang}>
-            {ui.language}
-          </button>
+        <div className={`hero-card ${pageCount > 0 ? 'is-ready' : ''}`} role="status">
+          <span className="hero-card-dot" aria-hidden="true" />
+          <div className="hero-card-text">
+            <span>{status}</span>
+            <strong>{pageCount > 0 ? ui.pagesLoaded(pageCount) : ui.pagesNotLoaded}</strong>
+          </div>
         </div>
       </header>
 
@@ -1423,8 +1422,21 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
             <p>{ui.panelDesc}</p>
           </div>
 
-          <label className="file-dropzone">
+          <label className={`file-dropzone ${fileName ? 'has-file' : ''}`}>
             <input type="file" accept="application/pdf,.pdf" onChange={handleFileChange} />
+            <span className="file-dropzone-icon" aria-hidden="true">
+              {fileName ? (
+                <svg viewBox="0 0 24 24">
+                  <path d="M6 2.5h8.5L19 7v13.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                  <path d="m8.8 13.2 2.2 2.2 4.3-4.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4.5 14.5v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              )}
+            </span>
             <div>
               <strong>{fileName || ui.choosePdf}</strong>
             </div>
@@ -1536,7 +1548,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
                   aria-expanded={isPerSideOpen}
                 >
                   <span>{ui.perSideMargins}</span>
-                  <span>{isPerSideOpen ? '−' : '+'}</span>
+                  <svg className="collapsible-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
                 {isPerSideOpen ? (
                   <div className="field-grid two-up margin-priority-grid collapsible-body">
@@ -1593,7 +1605,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
                 aria-expanded={isPageRangeOpen}
               >
                 <span>{ui.pageRangeSettings}</span>
-                <span>{isPageRangeOpen ? '−' : '+'}</span>
+                <svg className="collapsible-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {isPageRangeOpen ? (
                 <div className="collapsible-body">
@@ -1632,7 +1644,7 @@ export default function MarginTool({ lang, onToggleLang, theme, onPdfLoadedChang
                 aria-expanded={isDownloadScopeOpen}
               >
                 <span>{ui.downloadScopeSettings}</span>
-                <span>{isDownloadScopeOpen ? '−' : '+'}</span>
+                <svg className="collapsible-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {isDownloadScopeOpen ? (
                 <div className="collapsible-body">

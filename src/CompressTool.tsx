@@ -41,6 +41,7 @@ const COPY = {
   zh: {
     eyebrow: 'PDF Compressor',
     heroTitle: '一键压缩 PDF 体积，保持清晰阅读体验',
+    heroSubtitle: '批量上传 PDF，选择压缩强度，并对比压缩前后的页面效果。',
     statusWaiting: '等待上传 PDF',
     statusReading: '正在读取 PDF...',
     statusReadyToStart: '文件较大，请点击“开始压缩”',
@@ -99,6 +100,7 @@ const COPY = {
   en: {
     eyebrow: 'PDF Compressor',
     heroTitle: 'Compress PDF file size effortlessly with crisp quality',
+    heroSubtitle: 'Upload, pick a level, and compare before and after.',
     statusWaiting: 'Waiting for PDF',
     statusReading: 'Reading PDF...',
     statusReadyToStart: 'Large file ready — click Start Compression',
@@ -162,11 +164,10 @@ function createId(prefix: string) {
 
 type CompressToolProps = {
   lang: Lang;
-  onToggleLang: () => void;
   onPdfLoadedChange: (loaded: boolean) => void;
 };
 
-export default function CompressTool({ lang, onToggleLang, onPdfLoadedChange }: CompressToolProps) {
+export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolProps) {
   const ui = COPY[lang];
   const [items, setItems] = useState<CompressSourceItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -700,16 +701,17 @@ export default function CompressTool({ lang, onToggleLang, onPdfLoadedChange }: 
   return (
     <div>
       <header className="hero">
-        <div>
+        <div className="hero-text">
           <p className="eyebrow">{ui.eyebrow}</p>
           <h1>{ui.heroTitle}</h1>
+          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
-        <div className="hero-card">
-          <span>{status}</span>
-          <strong>{items.length > 0 ? ui.filesLoaded(items.length, totalPages) : ui.filesNotLoaded}</strong>
-          <button type="button" className="lang-toggle" onClick={onToggleLang}>
-            {ui.language}
-          </button>
+        <div className={`hero-card ${items.length > 0 ? 'is-ready' : ''}`} role="status">
+          <span className="hero-card-dot" aria-hidden="true" />
+          <div className="hero-card-text">
+            <span>{status}</span>
+            <strong>{items.length > 0 ? ui.filesLoaded(items.length, totalPages) : ui.filesNotLoaded}</strong>
+          </div>
         </div>
       </header>
 
@@ -727,6 +729,12 @@ export default function CompressTool({ lang, onToggleLang, onPdfLoadedChange }: 
               onChange={handleFileInputChange}
               disabled={isProcessing}
             />
+            <span className="file-dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4.5 14.5v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
             <div>
               <strong>{ui.choosePdf}</strong>
             </div>

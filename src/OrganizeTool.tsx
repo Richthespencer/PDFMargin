@@ -164,11 +164,10 @@ function createId(prefix: string) {
 
 type OrganizeToolProps = {
   lang: Lang;
-  onToggleLang: () => void;
   onPdfLoadedChange: (loaded: boolean) => void;
 };
 
-export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: OrganizeToolProps) {
+export default function OrganizeTool({ lang, onPdfLoadedChange }: OrganizeToolProps) {
   const [sources, setSources] = useState<OrganizeSource[]>([]);
   const [pages, setPages] = useState<OrganizePage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1031,16 +1030,17 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
   return (
     <div>
       <header className="hero">
-        <div>
+        <div className="hero-text">
           <p className="eyebrow">{ui.eyebrow}</p>
           <h1>{ui.heroTitle}</h1>
+          <p className="subtitle">{ui.heroSubtitle}</p>
         </div>
-        <div className="hero-card">
-          <span>{status}</span>
-          <strong>{totalPages > 0 ? ui.pagesLoaded(totalPages) : ui.pagesNotLoaded}</strong>
-          <button type="button" className="lang-toggle" onClick={onToggleLang}>
-            {ui.language}
-          </button>
+        <div className={`hero-card ${totalPages > 0 ? 'is-ready' : ''}`} role="status">
+          <span className="hero-card-dot" aria-hidden="true" />
+          <div className="hero-card-text">
+            <span>{status}</span>
+            <strong>{totalPages > 0 ? ui.pagesLoaded(totalPages) : ui.pagesNotLoaded}</strong>
+          </div>
         </div>
       </header>
 
@@ -1053,6 +1053,12 @@ export default function OrganizeTool({ lang, onToggleLang, onPdfLoadedChange }: 
 
           <label className="file-dropzone">
             <input type="file" accept="application/pdf,.pdf" multiple onChange={handleFilesChange} disabled={isProcessing} />
+            <span className="file-dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4.5 14.5v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
             <div>
               <strong>{isProcessing ? ui.choosingFiles : ui.chooseFiles}</strong>
               <span>{ui.chooseFilesHint}</span>
