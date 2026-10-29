@@ -5,7 +5,10 @@ import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import type { Theme } from './App';
 import lockLockedUrl from './assets/icons/lock-locked.svg?url';
 import lockUnlockedUrl from './assets/icons/lock-unlocked.svg?url';
+import { MARGIN_COPY, translateStaticStatus, type Lang } from './i18n';
 import { checkPasswordException, savePdfWithOptionalEncryption } from './pdfEncryption';
+
+export type { Lang } from './i18n';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -35,193 +38,19 @@ type MarginPresetId = 'uniform' | 'right-note' | 'bottom-note' | 'gutter';
 
 type MarginPattern = 'none' | 'ruled' | 'dots' | 'grid';
 
-export type Lang = 'zh' | 'en';
-
 const MM_TO_PT = 72 / 25.4;
 const PRESETS: Record<PagePresetKey, PagePreset> = {
-  Original: { label: '原尺寸', widthMm: 210, heightMm: 297 },
+  Original: { label: 'Original', widthMm: 210, heightMm: 297 },
   A4: { label: 'A4', widthMm: 210, heightMm: 297 },
   A3: { label: 'A3', widthMm: 297, heightMm: 420 },
   A5: { label: 'A5', widthMm: 148, heightMm: 210 },
   Letter: { label: 'Letter', widthMm: 215.9, heightMm: 279.4 },
   Legal: { label: 'Legal', widthMm: 215.9, heightMm: 355.6 },
   Tabloid: { label: 'Tabloid', widthMm: 279.4, heightMm: 431.8 },
-  Custom: { label: '自定义', widthMm: 210, heightMm: 297 },
+  Custom: { label: 'Custom', widthMm: 210, heightMm: 297 },
 };
 
-const PRESET_LABELS_EN: Record<PagePresetKey, string> = {
-  Original: 'Original',
-  A4: 'A4',
-  A3: 'A3',
-  A5: 'A5',
-  Letter: 'Letter',
-  Legal: 'Legal',
-  Tabloid: 'Tabloid',
-  Custom: 'Custom',
-};
-
-const COPY = {
-  zh: {
-    heroTitle: '为 PDF 添加边距，并实时预览输出效果',
-    heroSubtitle: '支持常见纸张尺寸、单页预览和自定义边距设置，适合快速调整文档版式。',
-    panelTitle: '控制面板',
-    panelDesc: '上传文件，调整纸张与边距。',
-    choosePdf: '点击或拖拽 PDF 文件到此处',
-    choosePdfHint: '支持选择本地 PDF 并立即生成预览。',
-    outputSize: '输出尺寸',
-    pageRange: '页码范围',
-    pageRangeSettings: '页码范围设置',
-    pageRangeHint: '示例：1-3, 6, 9-12；留空表示全部页面。',
-    pageRangePlaceholder: '如：1-3, 8, 10-12',
-    allPages: '全部',
-    oddPages: '奇数页',
-    evenPages: '偶数页',
-    selectedPages: (count: number) => `已选择 ${count} 页`,
-    invalidPageRange: (tokens: string) => `无效页码：${tokens}`,
-    pageRangeEmpty: '当前页码范围未匹配任何页面',
-    uniformMargin: '统一边距',
-    perSideMargins: '单独边距调整',
-    width: '宽度（mm）',
-    height: '高度（mm）',
-    top: '上边距（mm）',
-    right: '右边距（mm）',
-    bottom: '下边距（mm）',
-    left: '左边距（mm）',
-    outputPage: '输出页面',
-    downloadScope: '下载范围',
-    downloadScopeSettings: '下载范围设置',
-    downloadAllPages: '全部页面（保留未调整页）',
-    downloadAdjustedPages: '仅调整页面',
-    downloadAll: '下载全部页面 PDF',
-    downloadSelected: '下载仅调整页面 PDF',
-    print: '打印',
-    contentArea: '可用内容区',
-    processing: '处理中...',
-    previewTitle: '实时预览',
-    previewDesc: '当前设置下的第一页效果。可在预览中拖动页面内容来调整边距。',
-    previewPrev: '上一页',
-    previewNext: '下一页',
-    previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
-    previewEmpty: '上传 PDF 后即可查看实时预览',
-    language: 'English',
-    statusWaiting: '等待上传 PDF',
-    statusReading: '正在读取文件...',
-    statusLoaded: (pages: number) => `已加载 ${pages} 页，正在生成预览...`,
-    statusPreviewReady: (pages: number) => `已加载 ${pages} 页，预览已就绪`,
-    statusPageRangeEmpty: '页码范围未匹配到可预览页面',
-    statusPreviewFail: '预览生成失败',
-    statusOutputting: '正在生成输出 PDF...',
-    statusDone: 'PDF 已生成并开始下载',
-    statusPrintReady: '已打开打印窗口',
-    statusOutputFail: '生成失败，请稍后重试',
-    rasterizeCanvasFail: '加密 PDF 页面无法渲染为图片',
-    statusFileReadFail: '文件读取失败',
-    outputSizeInfo: '目标尺寸',
-    originalSize: '原始首页尺寸约为',
-    pagesLoaded: (pages: number) => `${pages} 页`,
-    pagesNotLoaded: '未加载',
-    useCurrentMargin: '20 mm',
-    passwordTitle: '需要密码解锁 PDF',
-    passwordDesc: (name: string) => `“${name}”受密码保护，请输入密码以解锁加载。`,
-    passwordPlaceholder: '请输入 PDF 密码',
-    passwordUnlock: '解锁',
-    passwordCancel: '取消',
-    passwordIncorrect: '密码错误，请重新输入。',
-    statusPasswordRequired: '等待输入 PDF 密码...',
-    keepEncryptionLabel: '保留 PDF 加密（取消勾选则移除加密）',
-    quickPresets: '快捷留白',
-    presetUniform: '四周均等',
-    presetRightNote: '右侧笔记',
-    presetBottomNote: '底部笔记',
-    presetGutter: '双面装订',
-    gutterMirrorHint: '双面装订已启用：偶数页左右边距将自动镜像对调',
-    marginPattern: '留白样式',
-    patternNone: '空白',
-    patternRuled: '横线',
-    patternDots: '点阵',
-    patternGrid: '方格',
-  },
-  en: {
-    heroTitle: 'Add margins to PDFs and preview the result in real time',
-    heroSubtitle: 'Adjust margins and export PDFs.',
-    panelTitle: 'Controls',
-    panelDesc: 'Upload a file and adjust paper and margins.',
-    choosePdf: 'Click or drag a PDF here',
-    choosePdfHint: 'Select a local PDF to generate the preview immediately.',
-    outputSize: 'Output size',
-    pageRange: 'Page range',
-    pageRangeSettings: 'Page range settings',
-    pageRangeHint: 'Example: 1-3, 6, 9-12. Leave empty for all pages.',
-    pageRangePlaceholder: 'e.g. 1-3, 8, 10-12',
-    allPages: 'All',
-    oddPages: 'Odd',
-    evenPages: 'Even',
-    selectedPages: (count: number) => `${count} pages selected`,
-    invalidPageRange: (tokens: string) => `Invalid pages: ${tokens}`,
-    pageRangeEmpty: 'The page range does not match any pages',
-    uniformMargin: 'Uniform margin',
-    perSideMargins: 'Per-side margins',
-    width: 'Width (mm)',
-    height: 'Height (mm)',
-    top: 'Top margin (mm)',
-    right: 'Right margin (mm)',
-    bottom: 'Bottom margin (mm)',
-    left: 'Left margin (mm)',
-    outputPage: 'Output page',
-    downloadScope: 'Download scope',
-    downloadScopeSettings: 'Download scope settings',
-    downloadAllPages: 'All pages (keep unadjusted pages)',
-    downloadAdjustedPages: 'Adjusted pages only',
-    downloadAll: 'Download all pages PDF',
-    downloadSelected: 'Download adjusted pages PDF',
-    print: 'Print',
-    contentArea: 'Available content area',
-    processing: 'Processing...',
-    previewTitle: 'Live preview',
-    previewDesc: 'Preview of the first page with current settings. Drag the page content in preview to adjust margins.',
-    previewPrev: 'Prev',
-    previewNext: 'Next',
-    previewPageCounter: (current: number, total: number) => `${current} / ${total}`,
-    previewEmpty: 'Upload a PDF to see the live preview',
-    language: '中文',
-    statusWaiting: 'Waiting for a PDF',
-    statusReading: 'Reading file...',
-    statusLoaded: (pages: number) => `Loaded ${pages} pages, generating preview...`,
-    statusPreviewReady: (pages: number) => `Loaded ${pages} pages, preview ready`,
-    statusPageRangeEmpty: 'No previewable pages in page range',
-    statusPreviewFail: 'Preview generation failed',
-    statusOutputting: 'Generating output PDF...',
-    statusDone: 'PDF generated and download started',
-    statusPrintReady: 'Print window opened',
-    statusOutputFail: 'Generation failed, please try again later',
-    rasterizeCanvasFail: 'Failed to render encrypted PDF page to image',
-    statusFileReadFail: 'File read failed',
-    outputSizeInfo: 'Target size',
-    originalSize: 'Approximate first-page size',
-    pagesLoaded: (pages: number) => `${pages} pages`,
-    pagesNotLoaded: 'Not loaded',
-    useCurrentMargin: '20 mm',
-    passwordTitle: 'Password required to unlock PDF',
-    passwordDesc: (name: string) => `"${name}" is password-protected. Please enter the password to unlock it.`,
-    passwordPlaceholder: 'Enter PDF password',
-    passwordUnlock: 'Unlock',
-    passwordCancel: 'Cancel',
-    passwordIncorrect: 'Incorrect password, please try again.',
-    statusPasswordRequired: 'Waiting for PDF password...',
-    keepEncryptionLabel: 'Keep PDF encryption (uncheck to remove encryption)',
-    quickPresets: 'Quick preset',
-    presetUniform: 'Uniform',
-    presetRightNote: 'Right note',
-    presetBottomNote: 'Bottom note',
-    presetGutter: 'Book gutter',
-    gutterMirrorHint: 'Book gutter active: left & right margins mirror on even pages',
-    marginPattern: 'Margin style',
-    patternNone: 'Blank',
-    patternRuled: 'Ruled',
-    patternDots: 'Dots',
-    patternGrid: 'Grid',
-  },
-} as const;
+const COPY = MARGIN_COPY;
 
 function mmToPt(valueMm: number) {
   return valueMm * MM_TO_PT;
@@ -584,7 +413,9 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
   const [isMirrorGutter, setIsMirrorGutter] = useState(false);
   const [marginPattern, setMarginPattern] = useState<MarginPattern>('none');
   const [isRendering, setIsRendering] = useState(false);
-  const [status, setStatus] = useState('等待上传 PDF');
+  const [status, setStatus] = useState<string>(() => COPY[lang].statusWaiting);
+  const [previewContainerSize, setPreviewContainerSize] = useState({ width: 0, height: 0 });
+  const prevLangRef = useRef<Lang>(lang);
   const [previewError, setPreviewError] = useState('');
   const [previewSourceVersion, setPreviewSourceVersion] = useState(0);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
@@ -624,6 +455,33 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
   useEffect(() => {
     onPdfLoadedChange(Boolean(fileBytes));
   }, [fileBytes, onPdfLoadedChange]);
+
+  useEffect(() => {
+    const prevLang = prevLangRef.current;
+    if (prevLang !== lang) {
+      prevLangRef.current = lang;
+      setStatus((current) => translateStaticStatus(COPY, prevLang, lang, current));
+    }
+  }, [lang]);
+
+  useEffect(() => {
+    const node = previewWrapRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const updateSize = () => {
+      if (node.clientWidth === 0 || node.clientHeight === 0) return;
+      setPreviewContainerSize((prev) =>
+        prev.width === node.clientWidth && prev.height === node.clientHeight
+          ? prev
+          : { width: node.clientWidth, height: node.clientHeight },
+      );
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   function isExternalFileDrag(event: React.DragEvent<HTMLElement>) {
     const types = Array.from(event.dataTransfer?.types ?? []);
@@ -746,7 +604,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
       setIsPdfEncrypted(false);
       setPageCount(0);
       setFileName('');
-      setPreviewError(lang === 'zh' ? 'PDF 读取失败，请重新选择文件。' : 'PDF failed to load. Please choose another file.');
+      setPreviewError(ui.pdfLoadError);
       setStatus(ui.statusFileReadFail);
     }
   }
@@ -766,7 +624,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
       setFileBytes(null);
       setPageCount(0);
       setFileName('');
-      setPreviewError(lang === 'zh' ? 'PDF 读取失败，请重新选择文件。' : 'PDF failed to load. Please choose another file.');
+      setPreviewError(ui.pdfLoadError);
       setStatus(ui.statusFileReadFail);
     }
   }
@@ -871,7 +729,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
         const sourceCtx = sourceCanvas.getContext('2d');
         if (!sourceCtx) {
           pdf.destroy();
-          throw new Error('无法创建预览上下文');
+          throw new Error(ui.previewContextFail);
         }
 
         await page
@@ -895,7 +753,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
         console.error('Preview render failed:', error);
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
-          setPreviewError(lang === 'zh' ? `预览生成失败：${message}` : `Preview generation failed: ${message}`);
+          setPreviewError(ui.previewFailDetail(message));
           setStatus(ui.statusPreviewFail);
         }
       } finally {
@@ -930,11 +788,14 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
     if (!canvas || !container || !fileBytes || !sourceCanvas || !sourceViewport) {
       return;
     }
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      return;
+    }
 
     const horizontalPadding = 32;
     const verticalPadding = 32;
-    const containerWidth = clamp((container.clientWidth || 900) - horizontalPadding, 280, 1068);
-    const containerHeight = Math.max(360, (container.clientHeight || 620) - verticalPadding);
+    const containerWidth = clamp((previewContainerSize.width || container.clientWidth || 900) - horizontalPadding, 280, 1068);
+    const containerHeight = Math.max(460, (previewContainerSize.height || container.clientHeight || 620) - verticalPadding);
     const cssHeight = containerHeight;
     const pixelWidth = Math.floor(containerWidth * window.devicePixelRatio);
     const pixelHeight = Math.floor(cssHeight * window.devicePixelRatio);
@@ -1022,9 +883,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
       bufferCtx.fillStyle = isDarkTheme ? '#8b877d' : '#5f5c55';
       bufferCtx.font = '13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       bufferCtx.fillText(
-        lang === 'zh'
-          ? `预览为第 ${previewPageNumber} 页，目标尺寸 ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`
-          : `Preview page ${previewPageNumber}, target size ${pageSizeMm.widthMm.toFixed(1)} × ${pageSizeMm.heightMm.toFixed(1)} mm`,
+        ui.previewCanvasCaption(previewPageNumber, pageSizeMm.widthMm.toFixed(1), pageSizeMm.heightMm.toFixed(1)),
         offsetX,
         Math.min(containerHeight - 12, offsetY + pageCssHeight + 24),
       );
@@ -1052,11 +911,14 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
     pageSizeMm.widthMm,
     pageSizePt.height,
     pageSizePt.width,
+    previewContainerSize.height,
+    previewContainerSize.width,
     previewMarginBoxPt,
     previewMargins,
     previewPageNumber,
     previewSourceVersion,
     theme,
+    ui,
   ]);
 
   type PdfDocProxy = Awaited<ReturnType<typeof getDocument>['promise']>;
@@ -1249,7 +1111,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
       console.error('Output PDF generation failed:', error);
       const message = error instanceof Error ? error.message : String(error);
       setStatus(ui.statusOutputFail);
-      setPreviewError(lang === 'zh' ? `输出 PDF 生成失败：${message}` : `Output PDF generation failed: ${message}`);
+      setPreviewError(ui.outputPdfFail(message));
     } finally {
       setIsRendering(false);
     }
@@ -1287,7 +1149,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
       console.error('Print PDF generation failed:', error);
       const message = error instanceof Error ? error.message : String(error);
       setStatus(ui.statusOutputFail);
-      setPreviewError(lang === 'zh' ? `打印 PDF 生成失败：${message}` : `Print PDF generation failed: ${message}`);
+      setPreviewError(ui.printPdfFail(message));
     } finally {
       setIsRendering(false);
     }
@@ -1448,7 +1310,7 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
               <select value={preset} onChange={(event) => setPreset(event.target.value as PagePresetKey)}>
                 {Object.entries(PRESETS).map(([key, value]) => (
                   <option key={key} value={key}>
-                    {lang === 'en' ? PRESET_LABELS_EN[key as PagePresetKey] : value.label}
+                    {key === 'Original' ? ui.presetOriginal : key === 'Custom' ? ui.presetCustom : value.label}
                   </option>
                 ))}
               </select>
@@ -1820,8 +1682,8 @@ export default function MarginTool({ lang, theme, onPdfLoadedChange }: MarginToo
                   event.stopPropagation();
                   setIsDragLocked((current) => !current);
                 }}
-                aria-label={isDragLocked ? 'Unlock drag' : 'Lock drag'}
-                title={isDragLocked ? 'Unlock drag' : 'Lock drag'}
+                aria-label={isDragLocked ? ui.unlockDrag : ui.lockDrag}
+                title={isDragLocked ? ui.unlockDrag : ui.lockDrag}
               >
                 <img
                   src={isDragLocked ? lockLockedUrl : lockUnlockedUrl}

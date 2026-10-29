@@ -1,15 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import MarginTool, { type Lang } from './MarginTool';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import MarginTool from './MarginTool';
 import OrganizeTool from './OrganizeTool';
 import CompressTool from './CompressTool';
+import { APP_COPY, LANG_OPTIONS, loadPersistedLang, type Lang } from './i18n';
 
 type Mode = 'margin' | 'organize' | 'compress';
 export type Theme = 'light' | 'dark';
-
-function detectBrowserLang(): Lang {
-  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage || '';
-  return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
 
 function loadPersistedMode(): Mode {
   try {
@@ -33,35 +29,90 @@ function loadPersistedTheme(): Theme {
 
 export default function App() {
   const [mode, setMode] = useState<Mode>(loadPersistedMode);
-  const [lang, setLang] = useState<Lang>(detectBrowserLang);
+  const [lang, setLang] = useState<Lang>(loadPersistedLang);
   const [theme, setTheme] = useState<Theme>(loadPersistedTheme);
-  const [hasPdfLoaded, setHasPdfLoaded] = useState(false);
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const [loadedByMode, setLoadedByMode] = useState<Record<Mode, boolean>>({
+    margin: false,
+    organize: false,
+    compress: false,
+  });
+
+  const langMenuRef = useRef<HTMLDivElement | null>(null);
+  const langButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const hasPdfLoaded = loadedByMode.margin || loadedByMode.organize || loadedByMode.compress;
+  const appUi = APP_COPY[lang];
+  const currentLangOption = LANG_OPTIONS.find((item) => item.code === lang) ?? LANG_OPTIONS[0];
+
+  const handleMarginLoaded = useCallback((loaded: boolean) => {
+    setLoadedByMode((prev) => (prev.margin === loaded ? prev : { ...prev, margin: loaded }));
+  }, []);
+
+  const handleOrganizeLoaded = useCallback((loaded: boolean) => {
+    setLoadedByMode((prev) => (prev.organize === loaded ? prev : { ...prev, organize: loaded }));
+  }, []);
+
+  const handleCompressLoaded = useCallback((loaded: boolean) => {
+    setLoadedByMode((prev) => (prev.compress === loaded ? prev : { ...prev, compress: loaded }));
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('pdfmargin-theme', theme); } catch {}
+    try {
+      localStorage.setItem('pdfmargin-theme', theme);
+    } catch {}
   }, [theme]);
 
   useEffect(() => {
-    try { localStorage.setItem('pdfmargin-mode', mode); } catch {}
+    try {
+      localStorage.setItem('pdfmargin-mode', mode);
+    } catch {}
   }, [mode]);
 
   useEffect(() => {
-    const confirmMsg: Record<Lang, string> = {
-      zh: '页面即将刷新，未保存的操作将会丢失。确定要刷新吗？',
-      en: 'The page will refresh and unsaved changes will be lost. Continue?',
-    };
+    document.documentElement.lang = currentLangOption.htmlLang;
+    document.title = appUi.appTitle;
+    try {
+      localStorage.setItem('pdfmargin-lang', lang);
+    } catch {}
+  }, [lang, currentLangOption.htmlLang, appUi.appTitle]);
+
+  useEffect(() => {
+    if (!hasPdfLoaded) return;
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault();
-      event.returnValue = confirmMsg[lang];
-      return confirmMsg[lang];
+      event.returnValue = appUi.beforeUnloadConfirm;
+      return appUi.beforeUnloadConfirm;
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [lang]);
+  }, [hasPdfLoaded, appUi.beforeUnloadConfirm]);
 
-  function handleToggleLang() {
-    setLang((current) => (current === 'zh' ? 'en' : 'zh'));
+  useEffect(() => {
+    if (!isLangMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsLangMenuOpen(false);
+        langButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isLangMenuOpen]);
+
+  function handleSelectLang(nextLang: Lang) {
+    setLang(nextLang);
+    setIsLangMenuOpen(false);
   }
 
   function handleToggleTheme() {
@@ -70,20 +121,13 @@ export default function App() {
 
   function handleModeSwitch(targetMode: Mode) {
     if (targetMode === mode) return;
-    if (hasPdfLoaded) {
-      const confirmMsg: Record<Lang, string> = {
-        zh: '当前已加载 PDF 文件，切换功能后将丢失当前操作。确定要切换吗？',
-        en: 'A PDF is currently loaded. Switching modes will lose your current work. Continue?',
-      };
-      if (!window.confirm(confirmMsg[lang])) return;
-    }
     setMode(targetMode);
   }
 
-  const modeItems: Array<{ id: Mode; label: Record<Lang, string>; icon: ReactNode }> = [
+  const modeItems: Array<{ id: Mode; label: string; icon: ReactNode }> = [
     {
       id: 'margin',
-      label: { zh: '边距', en: 'Margin' },
+      label: appUi.modes.margin,
       icon: (
         <svg className="mode-icon" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -93,7 +137,7 @@ export default function App() {
     },
     {
       id: 'organize',
-      label: { zh: '整理', en: 'Organize' },
+      label: appUi.modes.organize,
       icon: (
         <svg className="mode-icon" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -105,7 +149,7 @@ export default function App() {
     },
     {
       id: 'compress',
-      label: { zh: '压缩', en: 'Compress' },
+      label: appUi.modes.compress,
       icon: (
         <svg className="mode-icon" viewBox="0 0 24 24" aria-hidden="true">
           <g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -132,43 +176,84 @@ export default function App() {
           <span className="brand-name">PDFMargin</span>
         </div>
 
-        <nav className="mode-switch" aria-label="Feature mode selector">
-          {modeItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`mode-switch-button ${mode === item.id ? 'active' : ''}`}
-              aria-current={mode === item.id ? 'page' : undefined}
-              onClick={() => handleModeSwitch(item.id)}
-            >
-              {item.icon}
-              <span>{item.label[lang]}</span>
-            </button>
-          ))}
+        <nav className="mode-switch" aria-label={appUi.modeSelectorAria}>
+          {modeItems.map((item) => {
+            const isActive = mode === item.id;
+            const isLoadedInBg = !isActive && loadedByMode[item.id];
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`mode-switch-button ${isActive ? 'active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => handleModeSwitch(item.id)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {isLoadedInBg ? (
+                  <span className="mode-loaded-dot" title={appUi.loadedBadgeTitle} aria-label={appUi.loadedBadgeTitle} />
+                ) : null}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="topbar-actions">
-          <button
-            type="button"
-            className="lang-toggle"
-            onClick={handleToggleLang}
-            aria-label={lang === 'zh' ? 'Switch to English' : '切换到中文'}
-            title={lang === 'zh' ? 'Switch to English' : '切换到中文'}
-          >
-            <svg className="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                <circle cx="12" cy="12" r="8.5" />
-                <path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5M12 3.5C9.6 5.9 8.5 8.7 8.5 12s1.1 6.1 3.5 8.5" />
-              </g>
-            </svg>
-            <span>{lang === 'zh' ? 'EN' : '中文'}</span>
-          </button>
+          <div className="lang-menu-wrap" ref={langMenuRef}>
+            <button
+              ref={langButtonRef}
+              type="button"
+              className={`lang-toggle ${isLangMenuOpen ? 'is-open' : ''}`}
+              onClick={() => setIsLangMenuOpen((open) => !open)}
+              aria-haspopup="listbox"
+              aria-expanded={isLangMenuOpen}
+              aria-label={appUi.langMenuAria}
+              title={appUi.langMenuAria}
+            >
+              <svg className="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5M12 3.5C9.6 5.9 8.5 8.7 8.5 12s1.1 6.1 3.5 8.5" />
+                </g>
+              </svg>
+              <span>{currentLangOption.label}</span>
+              <svg className="lang-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {isLangMenuOpen ? (
+              <div className="lang-dropdown" role="listbox" aria-label={appUi.langMenuAria}>
+                {LANG_OPTIONS.map((option) => {
+                  const isSelected = option.code === lang;
+                  return (
+                    <button
+                      key={option.code}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      data-lang={option.code}
+                      className={`lang-option ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectLang(option.code)}
+                    >
+                      <span>{option.label}</span>
+                      {isSelected ? (
+                        <svg className="lang-check" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
           <button
             type="button"
             className="theme-toggle"
             onClick={handleToggleTheme}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={theme === 'light' ? appUi.switchToDark : appUi.switchToLight}
+            title={theme === 'light' ? appUi.switchToDark : appUi.switchToLight}
           >
             {theme === 'light' ? (
               <svg className="theme-icon" viewBox="0 0 24 24" role="img" aria-hidden="true">
@@ -195,13 +280,17 @@ export default function App() {
           </button>
         </div>
       </header>
-      {mode === 'margin' ? (
-        <MarginTool lang={lang} theme={theme} onPdfLoadedChange={setHasPdfLoaded} />
-      ) : mode === 'organize' ? (
-        <OrganizeTool lang={lang} onPdfLoadedChange={setHasPdfLoaded} />
-      ) : (
-        <CompressTool lang={lang} onPdfLoadedChange={setHasPdfLoaded} />
-      )}
+
+      <div className="tool-pane" hidden={mode !== 'margin'} aria-hidden={mode !== 'margin'}>
+        <MarginTool lang={lang} theme={theme} onPdfLoadedChange={handleMarginLoaded} />
+      </div>
+      <div className="tool-pane" hidden={mode !== 'organize'} aria-hidden={mode !== 'organize'}>
+        <OrganizeTool lang={lang} onPdfLoadedChange={handleOrganizeLoaded} />
+      </div>
+      <div className="tool-pane" hidden={mode !== 'compress'} aria-hidden={mode !== 'compress'}>
+        <CompressTool lang={lang} onPdfLoadedChange={handleCompressLoaded} />
+      </div>
+
       <footer className="app-footer">
         <span>© 2026 PDFMargin. All rights reserved.</span>
         <a href="https://github.com/Richthespencer/PDFMargin" target="_blank" rel="noreferrer">

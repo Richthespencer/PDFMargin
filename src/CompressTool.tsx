@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
-import type { Lang } from './MarginTool';
+import { COMPRESS_COPY, translateStaticStatus, type Lang } from './i18n';
 import { checkPasswordException } from './pdfEncryption';
 import {
   compressPdfBytes,
@@ -37,126 +37,7 @@ const LEVEL_ITEMS: ReadonlyArray<{ id: SimpleLevelId; strength: 1 | 2 | 3 }> = [
 // Files >= 20 MB require clicking "Start Compression" instead of auto-compressing on upload/level change
 const LARGE_FILE_THRESHOLD_BYTES = 20 * 1024 * 1024;
 
-const COPY = {
-  zh: {
-    eyebrow: 'PDF Compressor',
-    heroTitle: '一键压缩 PDF 体积，保持清晰阅读体验',
-    heroSubtitle: '批量上传 PDF，选择压缩强度，并对比压缩前后的页面效果。',
-    statusWaiting: '等待上传 PDF',
-    statusReading: '正在读取 PDF...',
-    statusReadyToStart: '文件较大，请点击“开始压缩”',
-    statusCompressing: (pct: number) => `正在压缩 ${pct}%`,
-    statusDone: (savedPercent: string) => `压缩完成，减少 ${savedPercent}%`,
-    statusNoSavings: '当前已是最优体积',
-    statusExportDone: '已开始下载 PDF',
-    statusPrintReady: '已打开打印窗口',
-    statusCleared: '已清空文件',
-    statusPasswordRequired: '等待输入密码...',
-    statusFail: '处理失败，请重试',
-    readFail: (msg: string) => `读取失败：${msg}`,
-    compressFail: (msg: string) => `压缩失败：${msg}`,
-    filesLoaded: (count: number, pages: number) =>
-      count === 1 ? `共 ${pages} 页` : `${count} 个文件 · ${pages} 页`,
-    filesNotLoaded: '未加载文件',
-    language: 'English',
-    panelTitle: '压缩设置',
-    choosePdf: '点击或拖拽 PDF 到此处',
-    levelLabel: '压缩程度',
-    levels: {
-      light: '轻度',
-      balanced: '标准',
-      aggressive: '强力',
-    },
-    summaryOriginal: '原始大小',
-    summaryCompressed: '压缩后大小',
-    summarySaved: '已节省',
-    keepEncryptionLabel: '保留原 PDF 密码保护',
-    startCompressBtn: '开始压缩',
-    compressingProgress: (pct: number) => `正在压缩... ${pct}%`,
-    downloadSingle: '下载压缩后的 PDF',
-    downloadAll: (count: number) => `下载全部 PDF (${count})`,
-    clearAllBtn: '清空文件',
-    print: '打印',
-    previewTitle: '实时预览',
-    previewEmpty: '上传 PDF 后即可在此预览压缩效果',
-    viewCompressed: '压缩后',
-    viewOriginal: '原文件',
-    previewPrev: '上一页',
-    previewNext: '下一页',
-    previewPageCounter: (cur: number, total: number) => `${cur} / ${total}`,
-    fileListTitle: '文件列表',
-    downloadItem: '下载',
-    removeItem: '移除',
-    alreadyOptimal: '已最优',
-    pendingBadge: '待压缩',
-    savedBadge: (pct: string) => `-${pct}%`,
-    passwordTitle: '需要密码解锁 PDF',
-    passwordDesc: (name: string) => `“${name}”受密码保护，请输入密码以继续。`,
-    passwordPlaceholder: '请输入 PDF 密码',
-    passwordUnlock: '解锁',
-    passwordCancel: '取消',
-    passwordIncorrect: '密码错误，请重新输入。',
-  },
-  en: {
-    eyebrow: 'PDF Compressor',
-    heroTitle: 'Compress PDF file size effortlessly with crisp quality',
-    heroSubtitle: 'Upload, pick a level, and compare before and after.',
-    statusWaiting: 'Waiting for PDF',
-    statusReading: 'Reading PDF...',
-    statusReadyToStart: 'Large file ready — click Start Compression',
-    statusCompressing: (pct: number) => `Compressing ${pct}%`,
-    statusDone: (savedPercent: string) => `Done — reduced by ${savedPercent}%`,
-    statusNoSavings: 'Already at optimal size',
-    statusExportDone: 'PDF download started',
-    statusPrintReady: 'Print window opened',
-    statusCleared: 'Files cleared',
-    statusPasswordRequired: 'Waiting for password...',
-    statusFail: 'Processing failed, please try again',
-    readFail: (msg: string) => `Failed to read PDF: ${msg}`,
-    compressFail: (msg: string) => `Compression failed: ${msg}`,
-    filesLoaded: (count: number, pages: number) =>
-      count === 1 ? `${pages} pages` : `${count} files · ${pages} pages`,
-    filesNotLoaded: 'No file loaded',
-    language: '中文',
-    panelTitle: 'Controls',
-    choosePdf: 'Click or drag PDF here',
-    levelLabel: 'Compression level',
-    levels: {
-      light: 'Light',
-      balanced: 'Balanced',
-      aggressive: 'Strong',
-    },
-    summaryOriginal: 'Original size',
-    summaryCompressed: 'Compressed size',
-    summarySaved: 'Saved',
-    keepEncryptionLabel: 'Keep PDF password protection',
-    startCompressBtn: 'Start Compression',
-    compressingProgress: (pct: number) => `Compressing... ${pct}%`,
-    downloadSingle: 'Download compressed PDF',
-    downloadAll: (count: number) => `Download all PDFs (${count})`,
-    clearAllBtn: 'Clear files',
-    print: 'Print',
-    previewTitle: 'Live preview',
-    previewEmpty: 'Upload a PDF to preview the compressed result',
-    viewCompressed: 'Compressed',
-    viewOriginal: 'Original',
-    previewPrev: 'Prev',
-    previewNext: 'Next',
-    previewPageCounter: (cur: number, total: number) => `${cur} / ${total}`,
-    fileListTitle: 'Files',
-    downloadItem: 'Download',
-    removeItem: 'Remove',
-    alreadyOptimal: 'Optimal',
-    pendingBadge: 'Pending',
-    savedBadge: (pct: string) => `-${pct}%`,
-    passwordTitle: 'Password required to unlock PDF',
-    passwordDesc: (name: string) => `"${name}" is password-protected. Enter the password to continue.`,
-    passwordPlaceholder: 'Enter PDF password',
-    passwordUnlock: 'Unlock',
-    passwordCancel: 'Cancel',
-    passwordIncorrect: 'Incorrect password, please try again.',
-  },
-} as const;
+const COPY = COMPRESS_COPY;
 
 function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -202,18 +83,11 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
 
   const activeConfigKey = `${level}:${keepEncryption ? 'enc' : 'plain'}`;
 
+  const prevLangRef = useRef<Lang>(lang);
+
   useEffect(() => {
     onPdfLoadedChange(items.length > 0);
   }, [items.length, onPdfLoadedChange]);
-
-  useLayoutEffect(() => {
-    setStatus((current) => {
-      if (current === COPY.zh.statusWaiting || current === COPY.en.statusWaiting) {
-        return COPY[lang].statusWaiting;
-      }
-      return current;
-    });
-  }, [lang]);
 
   useEffect(() => {
     const node = previewWrapRef.current;
@@ -221,6 +95,7 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
       return;
     }
     const updateSize = () => {
+      if (node.clientWidth === 0 || node.clientHeight === 0) return;
       const style = window.getComputedStyle(node);
       const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
       const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
@@ -289,6 +164,27 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
       anyCompressed,
     };
   }, [items, activeConfigKey]);
+
+  useLayoutEffect(() => {
+    const prevLang = prevLangRef.current;
+    if (prevLang === lang) return;
+    prevLangRef.current = lang;
+    setStatus((current) => {
+      const translated = translateStaticStatus(COPY, prevLang, lang, current);
+      if (translated !== current) {
+        return translated;
+      }
+      if (items.length > 0 && aggregateStats.anyCompressed) {
+        return aggregateStats.savedPercent > 0.1
+          ? COPY[lang].statusDone(aggregateStats.savedPercent.toFixed(1))
+          : COPY[lang].statusNoSavings;
+      }
+      if (items.length === 0) {
+        return COPY[lang].statusWaiting;
+      }
+      return current;
+    });
+  }, [lang, items.length, aggregateStats.anyCompressed, aggregateStats.savedPercent]);
 
   function requestFilePassword(fileName: string, errorMessage = ''): Promise<string | null> {
     setPasswordInput('');
@@ -985,7 +881,7 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
 
           <div
             ref={previewWrapRef}
-            className={`preview-wrap margin-preview-wrap ${isDragOverPreview ? 'is-drag-over' : ''}`}
+            className={`preview-wrap margin-preview-wrap compress-preview-wrap ${isDragOverPreview ? 'is-drag-over' : ''}`}
             onDragOver={(e) => {
               e.preventDefault();
               if (!isDragOverPreview) setIsDragOverPreview(true);
