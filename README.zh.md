@@ -12,7 +12,7 @@ PDFMargin 是一个本地优先的 PDF 应用，专注三个核心场景：
 - `Organize`：多 PDF 页面级整理，重排、旋转、删除后下载或打印
 - `Compress`：压缩 PDF 体积，兼顾清晰度与文本可搜索性
 
-所有处理都在本地浏览器/客户端完成，不上传文件到服务端。
+所有处理都在本地浏览器内完成，不上传文件到服务端。
 
 ## 核心能力
 
@@ -59,11 +59,11 @@ PDFMargin 是一个本地优先的 PDF 应用，专注三个核心场景：
 
 ### 体验与平台
 
-- 自动检测浏览器语言，默认显示对应语言（中文/英文）
-- 刷新页面时保留当前模式与主题状态
-- 切换功能模式与刷新页面时显示确认弹窗
+- 支持 8 种界面语言（简体中文、繁體中文、English、日本語、한국어、Español、Français、Deutsch），自动识别浏览器语言并本地持久化
+- 刷新页面时保留当前模式、语言与主题状态；切换功能模式时无缝保留各面板已上传的文件与进度
+- 仅在已加载 PDF 时启用页面刷新离开防呆提示
 - 浅色/深色主题切换（默认浅色）
-- Web、Tauri 桌面版、Chrome Extension 三端支持
+- Web（GitHub Pages）与 Chrome Extension 双端支持
 
 ## 快速开始
 
@@ -79,10 +79,6 @@ npm run dev
 npm run build
 npm run preview
 
-# Tauri desktop
-npm run tauri:dev
-npm run tauri:build
-
 # Chrome extension
 npm run build:extension
 npm run pack:extension
@@ -91,7 +87,6 @@ npm run pack:extension
 ## 产物位置
 
 - Web build：`dist/`
-- Tauri bundle：`src-tauri/target/release/bundle/`
 - Extension unpacked：`dist-extension/`
 - Extension zip：`release/pdfmargin-chrome-extension.zip`
 
@@ -105,10 +100,10 @@ npm run pack:extension
 ## 项目结构
 
 - `src/App.tsx`：全局模式/语言/主题切换
+- `src/i18n.ts`：多语言文案与语言检测
 - `src/MarginTool.tsx`：边距调整流程
 - `src/OrganizeTool.tsx`：页面整理流程
 - `src/CompressTool.tsx`：文件压缩流程
 - `src/pdfCompression.ts`：本地 PDF 压缩引擎
 - `src/styles.css`：主题与全局样式
-- `src-tauri/`：桌面端壳层
 - `extension/`：Chrome Extension 清单与后台脚本

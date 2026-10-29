@@ -12,7 +12,7 @@ PDFMargin is a local-first PDF app built around three practical workflows:
 - `Organize`: reorder, rotate, remove, and combine pages across multiple PDFs
 - `Compress`: reduce PDF file size while preserving clarity and searchable text
 
-All processing runs locally in your browser/desktop runtime.
+All processing runs locally in your browser.
 
 ## Core Features
 
@@ -59,11 +59,11 @@ All processing runs locally in your browser/desktop runtime.
 
 ### UX and Platforms
 
-- Auto-detect browser language for default UI language (Chinese/English)
-- Persist mode and theme state across page refresh
-- Confirmation dialogs for mode switching and page refresh
+- Multi-language UI (简体中文, 繁體中文, English, 日本語, 한국어, Español, Français, Deutsch) with browser auto-detection and local persistence
+- Persist mode, language, and theme state across page refresh, while preserving in-progress files across mode switches
+- Refresh warning only when a PDF document is loaded
 - Light/Dark theme toggle (default: light)
-- Available for Web, Tauri desktop, and Chrome Extension
+- Available for Web (GitHub Pages) and Chrome Extension
 
 ## Quick Start
 
@@ -79,10 +79,6 @@ npm run dev
 npm run build
 npm run preview
 
-# Tauri desktop
-npm run tauri:dev
-npm run tauri:build
-
 # Chrome extension
 npm run build:extension
 npm run pack:extension
@@ -91,7 +87,6 @@ npm run pack:extension
 ## Build Outputs
 
 - Web build: `dist/`
-- Tauri bundle: `src-tauri/target/release/bundle/`
 - Extension unpacked: `dist-extension/`
 - Extension zip: `release/pdfmargin-chrome-extension.zip`
 
@@ -105,10 +100,10 @@ npm run pack:extension
 ## Project Structure
 
 - `src/App.tsx`: global mode/language/theme switch
+- `src/i18n.ts`: 8-language localization dictionary
 - `src/MarginTool.tsx`: margin workflow
 - `src/OrganizeTool.tsx`: organize workflow
 - `src/CompressTool.tsx`: compression workflow
 - `src/pdfCompression.ts`: client-side PDF compression engine
 - `src/styles.css`: global + theming styles
-- `src-tauri/`: desktop wrapper
 - `extension/`: Chrome extension manifest and background script

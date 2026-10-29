@@ -18,7 +18,7 @@ PDFMargin provides local PDF tools, including:
 - merging/reordering/removing pages,
 - exporting processed PDFs.
 
-These operations are performed in your browser/desktop app runtime using local processing libraries.
+These operations are performed locally in your browser using client-side processing libraries.
 
 ## Data collection
 

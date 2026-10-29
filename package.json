@@ -1,7 +1,7 @@
 {
   "name": "pdf-margin-tool",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,19 +9,15 @@
     "build:pages": "tsc -b && vite build --base=/PDFMargin/",
     "build:extension": "node scripts/build-extension.mjs",
     "pack:extension": "node scripts/pack-extension.mjs",
-    "preview": "vite preview",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.149",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
