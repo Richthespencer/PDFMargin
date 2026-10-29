@@ -1593,6 +1593,7 @@ export type CompressCopy = {
   filesLoaded: (count: number, pages: number) => string;
   filesNotLoaded: string;
   panelTitle: string;
+  panelDesc: string;
   choosePdf: string;
   levelLabel: string;
   levels: {
@@ -1611,6 +1612,7 @@ export type CompressCopy = {
   clearAllBtn: string;
   print: string;
   previewTitle: string;
+  previewDesc: string;
   previewEmpty: string;
   viewCompressed: string;
   viewOriginal: string;
@@ -1652,6 +1654,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `共 ${pages} 页` : `${count} 个文件 · ${pages} 页`),
     filesNotLoaded: '未加载文件',
     panelTitle: '压缩设置',
+    panelDesc: '上传 PDF，选择压缩强度并管理队列文件。',
     choosePdf: '点击或拖拽 PDF 到此处',
     levelLabel: '压缩程度',
     levels: { light: '轻度', balanced: '标准', aggressive: '强力' },
@@ -1666,6 +1669,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: '清空文件',
     print: '打印',
     previewTitle: '实时预览',
+    previewDesc: '在“压缩后”与“原文件”之间切换，直观对比页面清晰度。',
     previewEmpty: '上传 PDF 后即可在此预览压缩效果',
     viewCompressed: '压缩后',
     viewOriginal: '原文件',
@@ -1705,6 +1709,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `共 ${pages} 頁` : `${count} 個檔案 · ${pages} 頁`),
     filesNotLoaded: '未載入檔案',
     panelTitle: '壓縮設定',
+    panelDesc: '上傳 PDF，選擇壓縮強度並管理佇列檔案。',
     choosePdf: '點擊或拖曳 PDF 至此處',
     levelLabel: '壓縮程度',
     levels: { light: '輕度', balanced: '標準', aggressive: '強力' },
@@ -1719,6 +1724,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: '清空檔案',
     print: '列印',
     previewTitle: '即時預覽',
+    previewDesc: '在「壓縮後」與「原檔案」之間切換，直觀對比頁面清晰度。',
     previewEmpty: '上傳 PDF 後即可在此預覽壓縮效果',
     viewCompressed: '壓縮後',
     viewOriginal: '原檔案',
@@ -1758,6 +1764,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `${pages} pages` : `${count} files · ${pages} pages`),
     filesNotLoaded: 'No file loaded',
     panelTitle: 'Controls',
+    panelDesc: 'Upload PDFs and choose a compression level.',
     choosePdf: 'Click or drag PDF here',
     levelLabel: 'Compression level',
     levels: { light: 'Light', balanced: 'Balanced', aggressive: 'Strong' },
@@ -1772,6 +1779,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: 'Clear files',
     print: 'Print',
     previewTitle: 'Live preview',
+    previewDesc: 'Toggle between Compressed and Original to compare page clarity.',
     previewEmpty: 'Upload a PDF to preview the compressed result',
     viewCompressed: 'Compressed',
     viewOriginal: 'Original',
@@ -1811,6 +1819,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `全 ${pages} ページ` : `${count} ファイル・${pages} ページ`),
     filesNotLoaded: '未選択',
     panelTitle: '圧縮設定',
+    panelDesc: 'PDF を追加し、圧縮レベルと対象ファイルを管理します。',
     choosePdf: 'クリックまたは PDF をここにドロップ',
     levelLabel: '圧縮レベル',
     levels: { light: '軽量', balanced: '標準', aggressive: '高圧縮' },
@@ -1825,6 +1834,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: 'ファイルをクリア',
     print: '印刷',
     previewTitle: 'ライブプレビュー',
+    previewDesc: '「圧縮後」と「元ファイル」を切り替えて画質を比較できます。',
     previewEmpty: 'PDF をアップロードすると圧縮結果をプレビューできます',
     viewCompressed: '圧縮後',
     viewOriginal: '元ファイル',
@@ -1864,6 +1874,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `총 ${pages}페이지` : `파일 ${count}개 · ${pages}페이지`),
     filesNotLoaded: '파일 없음',
     panelTitle: '압축 설정',
+    panelDesc: 'PDF를 추가하고 압축 강도와 대기열을 관리하세요.',
     choosePdf: '클릭하거나 PDF를 이곳에 드롭',
     levelLabel: '압축 강도',
     levels: { light: '약하게', balanced: '표준', aggressive: '강하게' },
@@ -1878,6 +1889,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: '목록 비우기',
     print: '인쇄',
     previewTitle: '실시간 미리보기',
+    previewDesc: '"압축본"과 "원본"을 전환하여 페이지 선명도를 비교하세요.',
     previewEmpty: 'PDF를 업로드하면 압축 결과를 미리 볼 수 있습니다',
     viewCompressed: '압축본',
     viewOriginal: '원본',
@@ -1917,6 +1929,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `${pages} págs.` : `${count} archivos · ${pages} págs.`),
     filesNotLoaded: 'Sin archivos',
     panelTitle: 'Ajustes',
+    panelDesc: 'Sube tus PDF, elige el nivel y gestiona la cola.',
     choosePdf: 'Haz clic o arrastra un PDF aquí',
     levelLabel: 'Nivel de compresión',
     levels: { light: 'Ligero', balanced: 'Equilibrado', aggressive: 'Fuerte' },
@@ -1931,6 +1944,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: 'Limpiar archivos',
     print: 'Imprimir',
     previewTitle: 'Vista previa',
+    previewDesc: 'Alterna entre Comprimido y Original para comparar la nitidez.',
     previewEmpty: 'Sube un PDF para previsualizar el resultado comprimido',
     viewCompressed: 'Comprimido',
     viewOriginal: 'Original',
@@ -1970,6 +1984,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `${pages} pages` : `${count} fichiers · ${pages} pages`),
     filesNotLoaded: 'Aucun fichier',
     panelTitle: 'Réglages',
+    panelDesc: 'Importez vos PDF, choisissez le niveau et gérez la file.',
     choosePdf: 'Cliquez ou déposez un PDF ici',
     levelLabel: 'Niveau de compression',
     levels: { light: 'Léger', balanced: 'Équilibré', aggressive: 'Fort' },
@@ -1984,6 +1999,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: 'Effacer les fichiers',
     print: 'Imprimer',
     previewTitle: 'Aperçu en direct',
+    previewDesc: 'Basculez entre Compressé et Original pour comparer la netteté.',
     previewEmpty: 'Importez un PDF pour prévisualiser le résultat compressé',
     viewCompressed: 'Compressé',
     viewOriginal: 'Original',
@@ -2023,6 +2039,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     filesLoaded: (count, pages) => (count === 1 ? `${pages} Seiten` : `${count} Dateien · ${pages} Seiten`),
     filesNotLoaded: 'Keine Datei geladen',
     panelTitle: 'Einstellungen',
+    panelDesc: 'PDFs hinzufügen, Stufe wählen und Dateiliste verwalten.',
     choosePdf: 'Klicken oder PDF hierher ziehen',
     levelLabel: 'Komprimierungsstufe',
     levels: { light: 'Leicht', balanced: 'Standard', aggressive: 'Stark' },
@@ -2037,6 +2054,7 @@ export const COMPRESS_COPY: Record<Lang, CompressCopy> = {
     clearAllBtn: 'Dateien leeren',
     print: 'Drucken',
     previewTitle: 'Live-Vorschau',
+    previewDesc: 'Zwischen Komprimiert und Original wechseln, um die Schärfe zu prüfen.',
     previewEmpty: 'PDF hochladen, um das komprimierte Ergebnis zu prüfen',
     viewCompressed: 'Komprimiert',
     viewOriginal: 'Original',

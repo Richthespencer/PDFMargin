@@ -1678,8 +1678,101 @@ select {
    Compress
    ========================================================================== */
 
+.compress-layout {
+  align-items: stretch;
+}
+
+.compress-layout > .panel {
+  height: 100%;
+}
+
+.compress-controls-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.compress-controls-panel .panel-header h2 {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.compress-layout .panel-header p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compress-controls-panel .file-dropzone {
+  margin-top: 14px;
+}
+
+.compress-queue-section {
+  margin-top: 16px;
+  flex: 1;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compress-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.compress-queue-header .compress-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.compress-queue-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.compress-clear-chip {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.compress-queue-empty {
+  flex: 1;
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-subtle);
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.compress-bottom-controls {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
 .compress-level-section {
-  margin-top: 18px;
+  margin-top: 0;
   display: grid;
   gap: 8px;
 }
@@ -1833,13 +1926,21 @@ select {
 }
 
 .compress-file-list {
-  margin-top: 14px;
-  margin-bottom: 14px;
-  display: grid;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  max-height: 300px;
+  max-height: 220px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.compress-action-row {
+  margin-bottom: 0;
 }
 
 .compress-file-card {
@@ -1848,7 +1949,7 @@ select {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px 10px 14px;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
@@ -1857,7 +1958,7 @@ select {
 
 .compress-file-card:hover {
   border-color: var(--border-strong);
-  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
 }
 
 .compress-file-card.is-selected {
@@ -1994,13 +2095,19 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .organize-layout {
+  .organize-layout,
+  .compress-layout {
     grid-template-columns: 1fr;
     align-items: start;
   }
 
-  .organize-layout .panel {
+  .organize-layout .panel,
+  .compress-layout > .panel {
     height: auto;
+  }
+
+  .compress-layout .panel-header p {
+    white-space: normal;
   }
 
   .organize-layout .preview-panel {

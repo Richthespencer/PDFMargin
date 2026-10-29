@@ -611,13 +611,14 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
         </div>
       </header>
 
-      <main className="layout">
-        <section className="panel controls-panel">
+      <main className="layout compress-layout">
+        <section className="panel controls-panel compress-controls-panel">
           <div className="panel-header">
             <h2>{ui.panelTitle}</h2>
+            <p>{ui.panelDesc}</p>
           </div>
 
-          <label className="file-dropzone">
+          <label className={`file-dropzone ${items.length > 0 ? 'has-file' : ''}`}>
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -636,248 +637,265 @@ export default function CompressTool({ lang, onPdfLoadedChange }: CompressToolPr
             </div>
           </label>
 
-          <div className="compress-level-section">
-            <span className="compress-section-label">{ui.levelLabel}</span>
-            <div className="compress-level-grid" role="radiogroup" aria-label={ui.levelLabel}>
-              {LEVEL_ITEMS.map(({ id, strength }) => {
-                const isActive = level === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    className={`compress-level-card ${isActive ? 'active' : ''}`}
-                    onClick={() => setLevel(id)}
-                    disabled={isProcessing}
-                  >
-                    <span className="compress-level-title">{ui.levels[id]}</span>
-                    <span className="compress-meter" aria-hidden="true">
-                      {[1, 2, 3].map((bar) => (
-                        <span
-                          key={bar}
-                          className={`compress-meter-bar bar-${bar} ${bar <= strength ? 'is-filled' : ''}`}
-                        />
-                      ))}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {isProcessing ? (
-            <div className="compress-progress-wrap" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
-              <div className="compress-progress-header">
-                <span>{ui.compressingProgress(progressPercent)}</span>
-                <strong>{progressPercent}%</strong>
-              </div>
-              <div className="compress-progress-track">
-                <div
-                  className="compress-progress-fill"
-                  style={{ width: `${Math.max(4, progressPercent)}%` }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <div className="summary-card compress-summary-card">
-            <div className="compress-summary-row">
-              <span>{ui.summaryOriginal}</span>
-              <strong>{formatFileSize(aggregateStats.originalTotal)}</strong>
-            </div>
-            <div className="compress-summary-row">
-              <span>{ui.summaryCompressed}</span>
-              <strong>
-                {aggregateStats.anyCompressed ? formatFileSize(aggregateStats.compressedTotal) : '—'}
-              </strong>
-            </div>
-            <div className="compress-summary-row">
-              <span>{ui.summarySaved}</span>
-              <strong className={aggregateStats.savedPercent > 0.1 ? 'compress-saved-highlight' : ''}>
-                {aggregateStats.anyCompressed
-                  ? `${formatFileSize(aggregateStats.savedBytes)} (${aggregateStats.savedPercent.toFixed(1)}%)`
-                  : '—'}
-              </strong>
-            </div>
-          </div>
-
-          {items.length > 0 && hasEncryptedItem ? (
-            <label className="encryption-checkbox-row">
-              <input
-                type="checkbox"
-                checked={keepEncryption}
-                onChange={(event) => setKeepEncryption(event.target.checked)}
-                disabled={isProcessing}
-              />
-              <span>{ui.keepEncryptionLabel}</span>
-            </label>
-          ) : null}
-
-          <div className="action-row margin-action-row">
-            <button
-              className="primary-button"
-              type="button"
-              onClick={handlePrimaryAction}
-              disabled={isProcessing || items.length === 0}
-            >
-              {isProcessing
-                ? ui.compressingProgress(progressPercent)
-                : showStartCompressButton
-                  ? ui.startCompressBtn
-                  : items.length > 1
-                    ? ui.downloadAll(items.length)
-                    : ui.downloadSingle}
-            </button>
-            <button
-              className="secondary-button print-button"
-              type="button"
-              onClick={handlePrint}
-              disabled={isProcessing || !selectedItem || showStartCompressButton}
-              title={ui.print}
-            >
-              <svg viewBox="0 0 24 24" className="print-icon" aria-hidden="true">
-                <path
-                  d="M7 3h10a1 1 0 0 1 1 1v4H6V4a1 1 0 0 1 1-1zm0 14h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4zm-2-7h14a3 3 0 0 1 3 3v4a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-4a3 3 0 0 1 3-3zm13 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"
-                  fill="currentColor"
-                />
-              </svg>
-              <span className="print-label">{ui.print}</span>
-            </button>
-          </div>
-
-          {items.length > 1 ? (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={handleClearAll}
-              disabled={isProcessing}
-            >
-              {ui.clearAllBtn}
-            </button>
-          ) : null}
-
-          {error ? <p className="error-text">{error}</p> : null}
-        </section>
-
-        <section className="panel preview-panel margin-preview-panel">
-          <div className="panel-header">
-            <div className="preview-header-row">
-              <h2>{ui.previewTitle}</h2>
-              {selectedItem ? (
-                <div className="preview-nav">
-                  <div className="range-chip-row" role="group" aria-label="Comparison mode">
-                    <button
-                      type="button"
-                      className={`range-chip ${comparisonMode === 'compressed' ? 'active' : ''}`}
-                      onClick={() => setComparisonMode('compressed')}
-                    >
-                      {ui.viewCompressed}
-                    </button>
-                    <button
-                      type="button"
-                      className={`range-chip ${comparisonMode === 'original' ? 'active' : ''}`}
-                      onClick={() => setComparisonMode('original')}
-                    >
-                      {ui.viewOriginal}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="range-chip"
-                    onClick={() => setPreviewPageIndex((p) => Math.max(0, p - 1))}
-                    disabled={previewPageIndex <= 0}
-                  >
-                    {ui.previewPrev}
-                  </button>
-                  <span className="preview-counter">
-                    {ui.previewPageCounter(previewPageIndex + 1, selectedItem.pageCount)}
-                  </span>
-                  <button
-                    type="button"
-                    className="range-chip"
-                    onClick={() =>
-                      setPreviewPageIndex((p) => Math.min(selectedItem.pageCount - 1, p + 1))
-                    }
-                    disabled={previewPageIndex >= selectedItem.pageCount - 1}
-                  >
-                    {ui.previewNext}
-                  </button>
-                </div>
+          <div className="compress-queue-section">
+            <div className="compress-queue-header">
+              <span className="compress-section-label">
+                {ui.fileListTitle}
+                <span className="compress-queue-count">{items.length}</span>
+              </span>
+              {items.length > 0 ? (
+                <button
+                  type="button"
+                  className="range-chip compress-clear-chip"
+                  onClick={handleClearAll}
+                  disabled={isProcessing}
+                >
+                  {ui.clearAllBtn}
+                </button>
               ) : null}
             </div>
-          </div>
 
-          {items.length > 0 ? (
-            <div className="compress-file-list" role="list" aria-label={ui.fileListTitle}>
-              {items.map((item) => {
-                const origBytes = item.bytes.byteLength;
-                const isUpToDate = item.result && item.appliedKey === activeConfigKey;
-                const compBytes = isUpToDate ? item.result!.stats.compressedSize : origBytes;
-                const savedPct = isUpToDate ? item.result!.stats.savedPercent : 0;
-                const isSelected = selectedItem?.id === item.id;
-                return (
-                  <div
-                    key={item.id}
-                    role="listitem"
-                    className={`compress-file-card ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => {
-                      setSelectedItemId(item.id);
-                      setPreviewPageIndex(0);
-                    }}
-                  >
-                    <div className="compress-file-info">
-                      <strong>{item.name}</strong>
-                      <div className="compress-file-meta">
-                        <span>
-                          {isUpToDate
-                            ? `${formatFileSize(origBytes)} → ${formatFileSize(compBytes)}`
-                            : formatFileSize(origBytes)}
-                        </span>
+            {items.length > 0 ? (
+              <div className="compress-file-list" role="list" aria-label={ui.fileListTitle}>
+                {items.map((item) => {
+                  const origBytes = item.bytes.byteLength;
+                  const isUpToDate = item.result && item.appliedKey === activeConfigKey;
+                  const compBytes = isUpToDate ? item.result!.stats.compressedSize : origBytes;
+                  const savedPct = isUpToDate ? item.result!.stats.savedPercent : 0;
+                  const isSelected = selectedItem?.id === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      role="listitem"
+                      className={`compress-file-card ${isSelected ? 'is-selected' : ''}`}
+                      onClick={() => {
+                        setSelectedItemId(item.id);
+                        setPreviewPageIndex(0);
+                      }}
+                    >
+                      <div className="compress-file-info">
+                        <strong>{item.name}</strong>
+                        <div className="compress-file-meta">
+                          <span>
+                            {isUpToDate
+                              ? `${formatFileSize(origBytes)} → ${formatFileSize(compBytes)}`
+                              : formatFileSize(origBytes)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="compress-file-actions">
-                      <span
-                        className={`compress-badge ${
-                          !isUpToDate ? '' : savedPct > 0.1 ? 'is-saved' : ''
-                        }`}
-                      >
-                        {!isUpToDate
-                          ? ui.pendingBadge
-                          : savedPct > 0.1
-                            ? ui.savedBadge(savedPct.toFixed(1))
-                            : ui.alreadyOptimal}
-                      </span>
-                      {items.length > 1 && isUpToDate ? (
+                      <div className="compress-file-actions">
+                        <span
+                          className={`compress-badge ${
+                            !isUpToDate ? '' : savedPct > 0.1 ? 'is-saved' : ''
+                          }`}
+                        >
+                          {!isUpToDate
+                            ? ui.pendingBadge
+                            : savedPct > 0.1
+                              ? ui.savedBadge(savedPct.toFixed(1))
+                              : ui.alreadyOptimal}
+                        </span>
+                        {items.length > 1 && isUpToDate ? (
+                          <button
+                            type="button"
+                            className="range-chip"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadFileItem(item);
+                            }}
+                            disabled={isProcessing}
+                          >
+                            {ui.downloadItem}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          className="range-chip"
+                          className="range-chip danger-confirm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            downloadFileItem(item);
+                            handleRemoveItem(item.id);
                           }}
                           disabled={isProcessing}
                         >
-                          {ui.downloadItem}
+                          {ui.removeItem}
                         </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="range-chip danger-confirm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveItem(item.id);
-                        }}
-                        disabled={isProcessing}
-                      >
-                        {ui.removeItem}
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="compress-queue-empty">{ui.filesNotLoaded}</div>
+            )}
+          </div>
+
+          <div className="compress-bottom-controls">
+            <div className="compress-level-section">
+              <span className="compress-section-label">{ui.levelLabel}</span>
+              <div className="compress-level-grid" role="radiogroup" aria-label={ui.levelLabel}>
+                {LEVEL_ITEMS.map(({ id, strength }) => {
+                  const isActive = level === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      className={`compress-level-card ${isActive ? 'active' : ''}`}
+                      onClick={() => setLevel(id)}
+                      disabled={isProcessing}
+                    >
+                      <span className="compress-level-title">{ui.levels[id]}</span>
+                      <span className="compress-meter" aria-hidden="true">
+                        {[1, 2, 3].map((bar) => (
+                          <span
+                            key={bar}
+                            className={`compress-meter-bar bar-${bar} ${bar <= strength ? 'is-filled' : ''}`}
+                          />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          ) : null}
+
+            {isProcessing ? (
+              <div className="compress-progress-wrap" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+                <div className="compress-progress-header">
+                  <span>{ui.compressingProgress(progressPercent)}</span>
+                  <strong>{progressPercent}%</strong>
+                </div>
+                <div className="compress-progress-track">
+                  <div
+                    className="compress-progress-fill"
+                    style={{ width: `${Math.max(4, progressPercent)}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="summary-card compress-summary-card">
+              <div className="compress-summary-row">
+                <span>{ui.summaryOriginal}</span>
+                <strong>{formatFileSize(aggregateStats.originalTotal)}</strong>
+              </div>
+              <div className="compress-summary-row">
+                <span>{ui.summaryCompressed}</span>
+                <strong>
+                  {aggregateStats.anyCompressed ? formatFileSize(aggregateStats.compressedTotal) : '—'}
+                </strong>
+              </div>
+              <div className="compress-summary-row">
+                <span>{ui.summarySaved}</span>
+                <strong className={aggregateStats.savedPercent > 0.1 ? 'compress-saved-highlight' : ''}>
+                  {aggregateStats.anyCompressed
+                    ? `${formatFileSize(aggregateStats.savedBytes)} (${aggregateStats.savedPercent.toFixed(1)}%)`
+                    : '—'}
+                </strong>
+              </div>
+            </div>
+
+            {items.length > 0 && hasEncryptedItem ? (
+              <label className="encryption-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={keepEncryption}
+                  onChange={(event) => setKeepEncryption(event.target.checked)}
+                  disabled={isProcessing}
+                />
+                <span>{ui.keepEncryptionLabel}</span>
+              </label>
+            ) : null}
+
+            <div className="action-row compress-action-row">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handlePrimaryAction}
+                disabled={isProcessing || items.length === 0}
+              >
+                {isProcessing
+                  ? ui.compressingProgress(progressPercent)
+                  : showStartCompressButton
+                    ? ui.startCompressBtn
+                    : items.length > 1
+                      ? ui.downloadAll(items.length)
+                      : ui.downloadSingle}
+              </button>
+              <button
+                className="secondary-button print-button"
+                type="button"
+                onClick={handlePrint}
+                disabled={isProcessing || !selectedItem || showStartCompressButton}
+                title={ui.print}
+              >
+                <svg viewBox="0 0 24 24" className="print-icon" aria-hidden="true">
+                  <path
+                    d="M7 3h10a1 1 0 0 1 1 1v4H6V4a1 1 0 0 1 1-1zm0 14h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4zm-2-7h14a3 3 0 0 1 3 3v4a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-4a3 3 0 0 1 3-3zm13 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"
+                    fill="currentColor"
+                  />
+                </svg>
+                <span className="print-label">{ui.print}</span>
+              </button>
+            </div>
+
+            {error ? <p className="error-text">{error}</p> : null}
+          </div>
+        </section>
+
+        <section className="panel preview-panel margin-preview-panel compress-preview-panel">
+          <div className="panel-header">
+            <div className="preview-header-row">
+              <h2>{ui.previewTitle}</h2>
+              <div className="preview-nav">
+                <div className="range-chip-row" role="group" aria-label="Comparison mode">
+                  <button
+                    type="button"
+                    className={`range-chip ${comparisonMode === 'compressed' ? 'active' : ''}`}
+                    onClick={() => setComparisonMode('compressed')}
+                    disabled={!selectedItem}
+                  >
+                    {ui.viewCompressed}
+                  </button>
+                  <button
+                    type="button"
+                    className={`range-chip ${comparisonMode === 'original' ? 'active' : ''}`}
+                    onClick={() => setComparisonMode('original')}
+                    disabled={!selectedItem}
+                  >
+                    {ui.viewOriginal}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="range-chip"
+                  onClick={() => setPreviewPageIndex((p) => Math.max(0, p - 1))}
+                  disabled={!selectedItem || previewPageIndex <= 0}
+                >
+                  {ui.previewPrev}
+                </button>
+                <span className="preview-counter">
+                  {selectedItem
+                    ? ui.previewPageCounter(previewPageIndex + 1, selectedItem.pageCount)
+                    : ui.previewPageCounter(0, 0)}
+                </span>
+                <button
+                  type="button"
+                  className="range-chip"
+                  onClick={() =>
+                    setPreviewPageIndex((p) =>
+                      selectedItem ? Math.min(selectedItem.pageCount - 1, p + 1) : 0,
+                    )
+                  }
+                  disabled={!selectedItem || previewPageIndex >= selectedItem.pageCount - 1}
+                >
+                  {ui.previewNext}
+                </button>
+              </div>
+            </div>
+            <p>{ui.previewDesc}</p>
+          </div>
 
           <div
             ref={previewWrapRef}
